@@ -28,8 +28,8 @@ class UpdateService {
   final Dio _dio = Dio();
   
   // Replace these with your GitHub account details when you upload the repo!
-  static const String githubOwner = 'YourGitHubUsername';
-  static const String githubRepo = 'xfood_pos';
+  static const String githubOwner = '3li-atta';
+  static const String githubRepo = 'XFood';
 
   static const String _updateUrl = 'https://api.github.com/repos/$githubOwner/$githubRepo/releases/latest';
 
