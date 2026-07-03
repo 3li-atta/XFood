@@ -99,57 +99,101 @@ class _PurchaseView extends StatelessWidget {
                   elevation: 2,
                   margin: const EdgeInsets.only(bottom: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.description_outlined,
-                      color: isVoided ? Colors.grey : colorScheme.primary,
-                      size: 36,
-                    ),
-                    title: Row(
-                      children: [
-                        Text(inv.invoiceNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 8),
-                        if (isVoided)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'VOIDED',
-                              style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                      ],
-                    ),
-                    subtitle: Text(
-                      'Supplier: ${inv.supplierName ?? "General"} • Date: ${DateFormat.yMd().add_jm().format(inv.createdAt)}',
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '\$${inv.totalAmount.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => _showInvoiceDetails(context, inv),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.description_outlined,
                             color: isVoided ? Colors.grey : colorScheme.primary,
-                            decoration: isVoided ? TextDecoration.lineThrough : null,
+                            size: 36,
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        IconButton(
-                          icon: const Icon(Icons.info_outline),
-                          onPressed: () => _showInvoiceDetails(context, inv),
-                        ),
-                        if (!isVoided && SessionManager.instance.isAdmin)
-                          IconButton(
-                            icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-                            tooltip: 'Void Invoice',
-                            onPressed: () => _confirmVoidInvoice(context, inv),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        inv.invoiceNumber,
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (isVoided) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red.withValues(alpha: 0.2),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Text(
+                                          'VOIDED',
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Supplier: ${inv.supplierName ?? "General"} • Date: ${DateFormat.yMd().add_jm().format(inv.createdAt)}',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                ),
+                              ],
+                            ),
                           ),
-                      ],
+                          const SizedBox(width: 16),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${inv.totalAmount.toStringAsFixed(2)} ج.م',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: isVoided ? Colors.grey : colorScheme.primary,
+                                  decoration: isVoided ? TextDecoration.lineThrough : null,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.info_outline, size: 20),
+                                    constraints: const BoxConstraints(),
+                                    padding: const EdgeInsets.all(4),
+                                    onPressed: () => _showInvoiceDetails(context, inv),
+                                  ),
+                                  if (!isVoided && SessionManager.instance.isAdmin) ...[
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      icon: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
+                                      tooltip: 'Void Invoice',
+                                      constraints: const BoxConstraints(),
+                                      padding: const EdgeInsets.all(4),
+                                      onPressed: () => _confirmVoidInvoice(context, inv),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -192,9 +236,9 @@ class _PurchaseView extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(child: Text('${it.ingredientName} (x${it.quantity})')),
-                          Text('\$${it.unitCost.toStringAsFixed(2)} / unit'),
+                          Text('${it.unitCost.toStringAsFixed(2)} ج.م / unit'),
                           const SizedBox(width: 16),
-                          Text('\$${it.lineTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text('${it.lineTotal.toStringAsFixed(2)} ج.م', style: const TextStyle(fontWeight: FontWeight.bold)),
                         ],
                       ),
                     );
@@ -206,7 +250,7 @@ class _PurchaseView extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Total Amount:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text('\$${inv.totalAmount.toStringAsFixed(2)}',
+                  Text('${inv.totalAmount.toStringAsFixed(2)} ج.م',
                       style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(ctx).colorScheme.primary, fontSize: 18)),
                 ],
               ),
@@ -314,11 +358,11 @@ class _PurchaseView extends StatelessWidget {
                             final ingName = ingredients.firstWhere((ing) => ing.id == c.ingredientId).name;
                             return ListTile(
                               title: Text(ingName),
-                              subtitle: Text('${c.quantity} units @ \$${c.unitCost.toStringAsFixed(2)}'),
+                              subtitle: Text('${c.quantity} units @ ${c.unitCost.toStringAsFixed(2)} ج.م'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text('\$${(c.quantity * c.unitCost).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text('${(c.quantity * c.unitCost).toStringAsFixed(2)} ج.م', style: const TextStyle(fontWeight: FontWeight.bold)),
                                   IconButton(
                                     icon: const Icon(Icons.delete, color: Colors.red),
                                     onPressed: () {
@@ -337,7 +381,7 @@ class _PurchaseView extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text('Total Amount:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          Text('\$${total.toStringAsFixed(2)}',
+                          Text('${total.toStringAsFixed(2)} ج.م',
                               style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary, fontSize: 20)),
                         ],
                       ),

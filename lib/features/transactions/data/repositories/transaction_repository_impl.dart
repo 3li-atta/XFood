@@ -1,26 +1,31 @@
 import '../../domain/entities/transaction_entity.dart';
 import '../../domain/entities/transaction_item_entity.dart';
+import '../../domain/entities/profit_loss_report_entity.dart';
 import '../../domain/repositories/transaction_repository.dart';
 import '../../../../database/app_database.dart';
 import '../../../../database/daos/transaction_dao.dart';
 import '../../../../database/daos/purchase_dao.dart';
+import '../../../../database/daos/expense_dao.dart';
 
 /// Concrete implementation of [TransactionRepository] using Drift DAOs.
 class TransactionRepositoryImpl implements TransactionRepository {
   final TransactionDao _transactionDao;
   final PurchaseDao _purchaseDao;
+  final ExpenseDao _expenseDao;
 
-  TransactionRepositoryImpl(this._transactionDao, this._purchaseDao);
+  TransactionRepositoryImpl(this._transactionDao, this._purchaseDao, this._expenseDao);
 
   @override
   Future<List<TransactionEntity>> getAllTransactions() async {
     final rows = await _transactionDao.getAllTransactions();
     final pRows = await _purchaseDao.getAllInvoices();
+    final eRows = await _expenseDao.getAllExpenses();
 
     final salesAndWaste = rows.map(_mapTxnToEntity).toList();
     final purchases = pRows.map(_mapPurchaseToEntity).toList();
+    final expenses = eRows.map(_mapExpenseToEntity).toList();
 
-    final combined = [...salesAndWaste, ...purchases];
+    final combined = [...salesAndWaste, ...purchases, ...expenses];
     combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return combined;
   }
@@ -30,6 +35,10 @@ class TransactionRepositoryImpl implements TransactionRepository {
     if (type == 'purchase') {
       final pRows = await _purchaseDao.getAllInvoices();
       return pRows.map(_mapPurchaseToEntity).toList();
+    }
+    if (type == 'expense') {
+      final eRows = await _expenseDao.getAllExpenses();
+      return eRows.map(_mapExpenseToEntity).toList();
     }
     final rows = await _transactionDao.getTransactionsByType(type);
     return rows.map(_mapTxnToEntity).toList();
@@ -56,6 +65,23 @@ class TransactionRepositoryImpl implements TransactionRepository {
         priceAtTime: row.unitCost,
         itemType: 'ingredient',
       )).toList();
+    }
+    if (type == 'expense') {
+      final exp = await _expenseDao.getExpenseById(transactionId);
+      if (exp != null) {
+        return [
+          TransactionItemEntity(
+            id: exp.id,
+            transactionId: exp.id,
+            mealId: null,
+            ingredientId: null,
+            quantity: 1.0,
+            priceAtTime: exp.amount,
+            itemType: 'expense',
+          )
+        ];
+      }
+      return [];
     }
     final rows = await _transactionDao.getItemsForTransaction(transactionId);
     return rows.map(_mapItemToEntity).toList();
@@ -140,5 +166,68 @@ class TransactionRepositoryImpl implements TransactionRepository {
       notes: row.notes,
       createdAt: row.createdAt,
     );
+  }
+
+  TransactionEntity _mapExpenseToEntity(Expense row) {
+    return TransactionEntity(
+      id: row.id,
+      userId: 0,
+      type: 'expense',
+      totalAmount: row.amount,
+      notes: 'الفئة: ${row.category}${row.note != null ? " • ${row.note}" : ""}',
+      createdAt: row.date,
+    );
+  }
+
+  @override
+  Future<ProfitLossReportEntity> getProfitLossReport(DateTime start, DateTime end) async {
+    final txns = await _transactionDao.getTransactionsByDateRange(start, end);
+    
+    double totalRevenue = 0.0;
+    double totalWasteCost = 0.0;
+    
+    for (final t in txns) {
+      if (t.type == 'sale') {
+        totalRevenue += t.totalAmount;
+      } else if (t.type == 'refund') {
+        totalRevenue -= t.totalAmount;
+      } else if (t.type == 'waste') {
+        totalWasteCost += t.totalAmount;
+      }
+    }
+
+    final totalCOGS = await _transactionDao.getCOGSForDateRange(start, end);
+
+    final purchaseInvoices = await _purchaseDao.getInvoicesByDateRange(start, end);
+    double totalPurchases = 0.0;
+    for (final pi in purchaseInvoices) {
+      totalPurchases += pi.totalAmount;
+    }
+
+    final totalExpenses = await _expenseDao.getTotalExpensesForDateRange(start, end);
+
+    final netProfit = totalRevenue - totalCOGS - totalWasteCost - totalExpenses;
+
+    return ProfitLossReportEntity(
+      totalRevenue: totalRevenue,
+      totalCOGS: totalCOGS,
+      totalWasteCost: totalWasteCost,
+      totalPurchases: totalPurchases,
+      totalExpenses: totalExpenses,
+      netProfit: netProfit,
+    );
+  }
+
+  @override
+  Future<bool> refundSaleTransaction(int transactionId, int userId) {
+    return _transactionDao.refundSaleTransaction(
+      transactionId: transactionId,
+      userId: userId,
+    );
+  }
+
+  @override
+  Future<bool> isTransactionRefunded(int transactionId) {
+    return _transactionDao.isTransactionRefunded(transactionId);
   }
 }

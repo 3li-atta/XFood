@@ -41,6 +41,16 @@ class MealDao extends DatabaseAccessor<AppDatabase> with _$MealDaoMixin {
         .watch();
   }
 
+  /// Watch all meals (including inactive).
+  Stream<List<Meal>> watchAllMeals() {
+    return (select(meals)
+          ..orderBy([
+            (m) => OrderingTerm.asc(m.category),
+            (m) => OrderingTerm.asc(m.name),
+          ]))
+        .watch();
+  }
+
   /// Get meals filtered by category.
   Future<List<Meal>> getMealsByCategory(String category) {
     return (select(meals)
@@ -67,6 +77,16 @@ class MealDao extends DatabaseAccessor<AppDatabase> with _$MealDaoMixin {
     return (update(meals)..where((m) => m.id.equals(mealId)))
         .write(MealsCompanion(
           isActive: const Value(false),
+          updatedAt: Value(DateTime.now()),
+        ))
+        .then((rows) => rows > 0);
+  }
+
+  /// Toggle active state of a meal.
+  Future<bool> toggleMealActive(int mealId, bool isActive) {
+    return (update(meals)..where((m) => m.id.equals(mealId)))
+        .write(MealsCompanion(
+          isActive: Value(isActive),
           updatedAt: Value(DateTime.now()),
         ))
         .then((rows) => rows > 0);

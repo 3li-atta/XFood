@@ -18,6 +18,7 @@ class MealsBloc extends Bloc<MealsEvent, MealsState> {
     on<CreateMealRequested>(_onCreateMeal);
     on<UpdateMealRequested>(_onUpdateMeal);
     on<DeactivateMealRequested>(_onDeactivateMeal);
+    on<ToggleMealActiveRequested>(_onToggleMealActive);
     on<_UpdateMealsList>(_onUpdateMealsList);
     on<_OnErrorOccurred>(_onOnErrorOccurred);
   }
@@ -25,7 +26,7 @@ class MealsBloc extends Bloc<MealsEvent, MealsState> {
   void _onLoadMeals(LoadMeals event, Emitter<MealsState> emit) {
     emit(const MealsLoading());
     _subscription?.cancel();
-    _subscription = _repository.watchActiveMeals().listen(
+    _subscription = _repository.watchAllMeals().listen(
       (meals) {
         add(_UpdateMealsList(meals));
       },
@@ -74,6 +75,15 @@ class MealsBloc extends Bloc<MealsEvent, MealsState> {
       DeactivateMealRequested event, Emitter<MealsState> emit) async {
     try {
       await _repository.deactivateMeal(event.id);
+    } catch (e) {
+      emit(MealsError(e.toString()));
+    }
+  }
+
+  Future<void> _onToggleMealActive(
+      ToggleMealActiveRequested event, Emitter<MealsState> emit) async {
+    try {
+      await _repository.toggleMealActive(event.id, event.isActive);
     } catch (e) {
       emit(MealsError(e.toString()));
     }

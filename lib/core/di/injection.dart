@@ -14,15 +14,21 @@ import 'package:xfood_pos/features/transactions/data/repositories/transaction_re
 import 'package:xfood_pos/features/transactions/domain/repositories/transaction_repository.dart';
 import 'package:xfood_pos/features/procurement/domain/repositories/purchase_repository.dart';
 import 'package:xfood_pos/features/procurement/data/repositories/purchase_repository_impl.dart';
-import 'package:xfood_pos/features/treasury/domain/repositories/treasury_repository.dart';
 import 'package:xfood_pos/features/treasury/data/repositories/treasury_repository_impl.dart';
+import 'package:xfood_pos/features/treasury/domain/repositories/treasury_repository.dart';
 import 'package:xfood_pos/features/shifts/domain/repositories/shift_repository.dart';
 import 'package:xfood_pos/features/shifts/data/repositories/shift_repository_impl.dart';
+import 'package:xfood_pos/features/expenses/domain/repositories/expense_repository.dart';
+import 'package:xfood_pos/features/expenses/data/repositories/expense_repository_impl.dart';
+import 'package:xfood_pos/features/expenses/domain/usecases/expense_usecases.dart';
+import 'package:xfood_pos/features/expenses/presentation/bloc/expense_bloc.dart';
 
 // Use Cases
 import 'package:xfood_pos/features/auth/domain/usecases/login_usecase.dart';
 import 'package:xfood_pos/features/auth/domain/usecases/recover_password_usecase.dart';
 import 'package:xfood_pos/features/transactions/domain/usecases/create_sale_usecase.dart';
+import 'package:xfood_pos/features/transactions/domain/usecases/record_waste_usecase.dart';
+import 'package:xfood_pos/features/transactions/domain/usecases/get_profit_loss_usecase.dart';
 import 'package:xfood_pos/features/procurement/domain/usecases/procurement_usecases.dart';
 import 'package:xfood_pos/features/treasury/domain/usecases/treasury_usecases.dart';
 import 'package:xfood_pos/features/shifts/domain/usecases/shift_usecases.dart';
@@ -30,6 +36,7 @@ import 'package:xfood_pos/features/shifts/domain/usecases/shift_usecases.dart';
 // Blocs
 import 'package:xfood_pos/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:xfood_pos/features/transactions/presentation/bloc/pos_bloc.dart';
+import 'package:xfood_pos/features/transactions/presentation/bloc/profit_loss_bloc.dart';
 import 'package:xfood_pos/features/inventory/presentation/bloc/inventory_bloc.dart';
 import 'package:xfood_pos/features/meals/presentation/bloc/meals_bloc.dart';
 import 'package:xfood_pos/features/procurement/presentation/bloc/purchase_bloc.dart';
@@ -41,6 +48,9 @@ final getIt = GetIt.instance;
 
 /// Initialize all dependency injection bindings.
 Future<void> configureDependencies() async {
+  // Prevent duplicate registration on hot restart / WorkManager callback.
+  if (getIt.isRegistered<AppDatabase>()) return;
+
   // ── Database ──────────────────────────────────────────────
   final database = AppDatabase();
   getIt.registerSingleton<AppDatabase>(database);
@@ -54,6 +64,7 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton(() => database.shiftDao);
   getIt.registerLazySingleton(() => database.purchaseDao);
   getIt.registerLazySingleton(() => database.treasuryDao);
+  getIt.registerLazySingleton(() => database.expenseDao);
 
   // ── Repositories ──────────────────────────────────────────
   getIt.registerLazySingleton<AuthRepository>(
@@ -66,7 +77,7 @@ Future<void> configureDependencies() async {
     () => MealRepositoryImpl(getIt(), getIt()),
   );
   getIt.registerLazySingleton<TransactionRepository>(
-    () => TransactionRepositoryImpl(getIt(), getIt()),
+    () => TransactionRepositoryImpl(getIt(), getIt(), getIt()),
   );
   getIt.registerLazySingleton<PurchaseRepository>(
     () => PurchaseRepositoryImpl(getIt(), getIt()),
@@ -80,12 +91,17 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<BackupService>(
     () => GoogleDriveBackupService(),
   );
+  getIt.registerLazySingleton<ExpenseRepository>(
+    () => ExpenseRepositoryImpl(getIt()),
+  );
 
   // ── Use Cases ─────────────────────────────────────────────
   getIt.registerLazySingleton(() => LoginUseCase(getIt()));
   getIt.registerLazySingleton(() => RecoverPasswordUseCase(getIt()));
   getIt.registerLazySingleton(() => CreateSaleUseCase(getIt()));
   getIt.registerLazySingleton(() => GetTransactionsUseCase(getIt()));
+  getIt.registerLazySingleton(() => RecordWasteUseCase(getIt()));
+  getIt.registerLazySingleton(() => GetProfitLossUseCase(getIt()));
   
   getIt.registerLazySingleton(() => CreatePurchaseInvoiceUseCase(getIt()));
   getIt.registerLazySingleton(() => GetAllPurchaseInvoicesUseCase(getIt()));
@@ -99,15 +115,20 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton(() => CloseShiftUseCase(getIt()));
   getIt.registerLazySingleton(() => GetActiveShiftUseCase(getIt()));
   getIt.registerLazySingleton(() => GetShiftHistoryUseCase(getIt()));
+  getIt.registerLazySingleton(() => RecordExpenseUseCase(getIt()));
+  getIt.registerLazySingleton(() => GetExpensesUseCase(getIt()));
 
   // ── Blocs ─────────────────────────────────────────────────
-  getIt.registerLazySingleton(() => AuthBloc(
+  getIt.registerFactory(() => AuthBloc(
         loginUseCase: getIt(),
         recoverPasswordUseCase: getIt(),
       ));
   getIt.registerFactory(() => PosBloc(
         createSaleUseCase: getIt(),
         shiftRepository: getIt(),
+      ));
+  getIt.registerFactory(() => ProfitLossBloc(
+        getProfitLossUseCase: getIt(),
       ));
   getIt.registerFactory(() => InventoryBloc(
         repository: getIt(),
@@ -132,4 +153,8 @@ Future<void> configureDependencies() async {
         getShiftHistoryUseCase: getIt(),
       ));
   getIt.registerFactory(() => BackupBloc(getIt()));
+  getIt.registerFactory(() => ExpenseBloc(
+        recordExpenseUseCase: getIt(),
+        getExpensesUseCase: getIt(),
+      ));
 }

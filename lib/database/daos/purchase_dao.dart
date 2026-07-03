@@ -204,6 +204,16 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       return true;
     });
   }
+
+  /// Get purchase invoices within a date range.
+  Future<List<PurchaseInvoice>> getInvoicesByDateRange(DateTime start, DateTime end) {
+    return (select(purchaseInvoices)
+          ..where((pi) =>
+              pi.status.equals('completed') &
+              pi.createdAt.isBiggerOrEqualValue(start) &
+              pi.createdAt.isSmallerOrEqualValue(end)))
+        .get();
+  }
 }
 
 /// Input DTO for purchase item creation.

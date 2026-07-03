@@ -15,6 +15,9 @@ abstract class MealRepository {
   /// Watch active meals (reactive stream for POS screen).
   Stream<List<MealEntity>> watchActiveMeals();
 
+  /// Watch all meals (including inactive).
+  Stream<List<MealEntity>> watchAllMeals();
+
   /// Get a single meal by id.
   Future<MealEntity> getMealById(int id);
 
@@ -30,10 +33,14 @@ abstract class MealRepository {
     String? name,
     double? sellingPrice,
     String? category,
+    bool? isActive,
   });
 
   /// Soft-delete (deactivate) a meal.
   Future<bool> deactivateMeal(int mealId);
+
+  /// Toggle active state of a meal.
+  Future<bool> toggleMealActive(int mealId, bool isActive);
 
   /// Get the full recipe for a meal (with ingredient details).
   Future<List<RecipeDetailEntity>> getRecipeForMeal(int mealId);

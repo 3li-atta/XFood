@@ -73,9 +73,7 @@ class _MealsView extends StatelessWidget {
                   onEdit: () => _showMealDialog(context, meal: meal),
                   onRecipe: () => _showRecipeDialog(context, meal, bloc),
                   onToggle: () {
-                    if (meal.isActive) {
-                      bloc.add(DeactivateMealRequested(meal.id));
-                    }
+                    bloc.add(ToggleMealActiveRequested(meal.id, !meal.isActive));
                   },
                   onViewCost: () => _showCostBreakdown(context, meal, mealRepo),
                 );
@@ -192,25 +190,25 @@ class _MealsView extends StatelessWidget {
                     title: Text(r.ingredient.name),
                     subtitle: Text(
                         '${r.recipe.quantityRequired} ${r.ingredient.unitOfMeasurement}'),
-                    trailing: Text('\$${r.ingredientCost.toStringAsFixed(2)}'),
+                    trailing: Text('${r.ingredientCost.toStringAsFixed(2)} ج.م'),
                   )),
               const Divider(),
               ListTile(
                 title: const Text('Total Cost',
                     style: TextStyle(fontWeight: FontWeight.bold)),
-                trailing: Text('\$${totalCost.toStringAsFixed(2)}',
+                trailing: Text('${totalCost.toStringAsFixed(2)} ج.م',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
               ListTile(
                 title: const Text('Selling Price'),
-                trailing: Text('\$${meal.sellingPrice.toStringAsFixed(2)}'),
+                trailing: Text('${meal.sellingPrice.toStringAsFixed(2)} ج.م'),
               ),
               ListTile(
                 title: Text('Profit',
                     style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: profit >= 0 ? Colors.green : Colors.red)),
-                trailing: Text('\$${profit.toStringAsFixed(2)}',
+                trailing: Text('${profit.toStringAsFixed(2)} ج.م',
                     style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: profit >= 0 ? Colors.green : Colors.red)),
@@ -245,45 +243,141 @@ class _MealTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: colorScheme.primaryContainer,
-          child: Icon(Icons.restaurant, color: colorScheme.primary),
-        ),
-        title: Text(meal.name,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              decoration:
-                  meal.isActive ? null : TextDecoration.lineThrough,
-            )),
-        subtitle: Text('${meal.category} • \$${meal.sellingPrice.toStringAsFixed(2)}'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
+      elevation: 0.5,
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.4), width: 1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
           children: [
-            IconButton(
-                icon: const Icon(Icons.receipt_long, size: 20),
-                tooltip: 'Recipe',
-                onPressed: onRecipe),
-            IconButton(
-                icon: const Icon(Icons.calculate, size: 20),
-                tooltip: 'Cost Breakdown',
-                onPressed: onViewCost),
-            IconButton(
-                icon: const Icon(Icons.edit, size: 20),
-                tooltip: 'Edit',
-                onPressed: onEdit),
-            IconButton(
-                icon: Icon(
-                    meal.isActive ? Icons.visibility_off : Icons.visibility,
-                    size: 20),
-                tooltip: meal.isActive ? 'Deactivate' : 'Activate',
-                onPressed: onToggle),
+            // Avatar Container
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: meal.isActive
+                    ? colorScheme.primary.withValues(alpha: 0.08)
+                    : colorScheme.onSurface.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                meal.category.toLowerCase().contains('drink')
+                    ? Icons.local_drink_rounded
+                    : Icons.restaurant_rounded,
+                color: meal.isActive ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Text Details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    meal.name,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      decoration: meal.isActive ? null : TextDecoration.lineThrough,
+                      color: meal.isActive ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          meal.category,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${meal.sellingPrice.toStringAsFixed(2)} ج.م',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: meal.isActive ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Actions
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.receipt_long_rounded),
+                  tooltip: 'Recipe',
+                  color: meal.isActive ? colorScheme.onSurfaceVariant : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  onPressed: onRecipe,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.calculate_outlined),
+                  tooltip: 'Cost Breakdown',
+                  color: meal.isActive ? colorScheme.onSurfaceVariant : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  onPressed: onViewCost,
+                ),
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert_rounded, color: colorScheme.onSurfaceVariant),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      onEdit();
+                    } else if (value == 'toggle') {
+                      onToggle();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 20),
+                          SizedBox(width: 8),
+                          Text('Edit Meal'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'toggle',
+                      child: Row(
+                        children: [
+                          Icon(
+                            meal.isActive ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(meal.isActive ? 'Deactivate' : 'Activate'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ],
         ),
       ),

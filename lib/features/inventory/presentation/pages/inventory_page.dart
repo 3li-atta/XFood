@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/entities/ingredient_entity.dart';
 import '../bloc/inventory_bloc.dart';
 import '../../../../core/di/injection.dart';
+import '../../../transactions/domain/repositories/transaction_repository.dart';
+import '../../../../core/utils/session_manager.dart';
 
-/// Inventory management page — view, add, edit ingredients and stock levels.
+/// صفحة إدارة المخزون - عرض المواد الخام وتعديلها وإضافة الهالك بتصميم لوحة بيانات عالية الجودة.
 class InventoryPage extends StatelessWidget {
   const InventoryPage({super.key});
 
@@ -18,8 +20,21 @@ class InventoryPage extends StatelessWidget {
   }
 }
 
-class _InventoryView extends StatelessWidget {
+class _InventoryView extends StatefulWidget {
   const _InventoryView();
+
+  @override
+  State<_InventoryView> createState() => _InventoryViewState();
+}
+
+class _InventoryViewState extends State<_InventoryView> {
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,12 +43,17 @@ class _InventoryView extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inventory Management'),
+        title: const Text('إدارة المخزون'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/pos'),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep_outlined, color: Colors.red),
+            tooltip: 'تسجيل الهالك / Record Waste',
+            onPressed: () => _showRecordWasteDialog(context),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
@@ -45,85 +65,319 @@ class _InventoryView extends StatelessWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddEditDialog(context),
         icon: const Icon(Icons.add),
-        label: const Text('Add Ingredient'),
+        label: const Text('إضافة صنف'),
       ),
-      body: BlocBuilder<InventoryBloc, InventoryState>(
+      body: BlocConsumer<InventoryBloc, InventoryState>(
+        listener: (context, state) {
+          if (state is InventoryError) {
+            String displayMessage = state.message;
+            if (state.message.contains('FOREIGN KEY constraint failed') ||
+                state.message.contains('SqliteException(787)')) {
+              displayMessage = 'لا يمكن حذف هذا المكون لأنه مرتبط بوصفات وجبات أو عمليات شراء نشطة.';
+            }
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(displayMessage),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+          }
+        },
+        buildWhen: (previous, current) {
+          if (current is InventoryError && previous is InventoryLoaded) {
+            return false;
+          }
+          return true;
+        },
         builder: (context, state) {
           if (state is InventoryLoading) {
             return const Center(child: CircularProgressIndicator());
           }
           if (state is InventoryError) {
-            return Center(child: Text('Error: ${state.message}'));
+            return Center(child: Text('خطأ: ${state.message}'));
           }
           if (state is InventoryLoaded) {
             final ingredients = state.ingredients;
             if (ingredients.isEmpty) {
-              return const Center(child: Text('No ingredients yet.'));
+              return const Center(child: Text('لا توجد أصناف في المخزون حالياً.'));
             }
 
-            return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: ingredients.length,
-              itemBuilder: (context, index) {
-                final ing = ingredients[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    leading: CircleAvatar(
-                      backgroundColor: theme.colorScheme.primaryContainer,
-                      child: Icon(Icons.inventory_2_outlined, color: theme.colorScheme.primary),
+            final searchQuery = _searchController.text.toLowerCase();
+            final filtered = ingredients.where((ing) {
+              return ing.name.toLowerCase().contains(searchQuery);
+            }).toList();
+
+            final totalValue = filtered.fold<double>(
+              0.0,
+              (sum, ing) => sum + ing.stockValue,
+            );
+
+            return Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // شريط البحث والتحليلات العلوي التفاعلي
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    title: Text(
-                      ing.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Wrap(
-                        spacing: 16,
-                        runSpacing: 4,
-                        children: [
-                          Text('Unit: ${ing.unitOfMeasurement}', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-                          Text('Cost: \$${ing.costPrice.toStringAsFixed(2)}', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-                          Text(
-                            'Value: \$${ing.stockValue.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.w600,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isNarrow = constraints.maxWidth < 600;
+
+                          final searchField = TextField(
+                            controller: _searchController,
+                            onChanged: (val) => setState(() {}),
+                            decoration: InputDecoration(
+                              hintText: 'البحث عن صنف بالاسم...',
+                              prefixIcon: const Icon(Icons.search),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
                             ),
-                          ),
-                        ],
+                          );
+
+                          final totalValueWidget = Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.monetization_on, color: theme.colorScheme.primary),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'إجمالي قيمة المخزون: ',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.onPrimaryContainer,
+                                  ),
+                                ),
+                                Text(
+                                  '${totalValue.toStringAsFixed(2)} ج.م',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (isNarrow) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                searchField,
+                                const SizedBox(height: 12),
+                                totalValueWidget,
+                              ],
+                            );
+                          }
+
+                          return Row(
+                            children: [
+                              Expanded(child: searchField),
+                              const SizedBox(width: 16),
+                              totalValueWidget,
+                            ],
+                          );
+                        },
                       ),
                     ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _StockBadge(
-                          isLow: ing.isLowStock,
-                          stockText: '${ing.currentStock.toStringAsFixed(1)} ${ing.unitOfMeasurement}',
+                  ),
+                  const SizedBox(height: 16),
+
+                  // لوحة البيانات وجدول الأصناف
+                  Expanded(
+                    child: Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.vertical,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minWidth: MediaQuery.of(context).size.width - 64,
+                              ),
+                              child: DataTable(
+                                headingRowColor: WidgetStateProperty.all(
+                                  colorScheme.primaryContainer.withValues(alpha: 0.2),
+                                ),
+                                columnSpacing: 24,
+                                horizontalMargin: 20,
+                                columns: const [
+                                  DataColumn(
+                                    label: Text(
+                                      'اسم الصنف',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'المخزون الحالي',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'تكلفة الوحدة',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'قيمة المخزون',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'إجراءات',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                                rows: filtered.map((ing) {
+                                  final isLow = ing.currentStock < 10;
+                                  return DataRow(
+                                    cells: [
+                                      // اسم الصنف مع مؤشر مخزون منخفض
+                                      DataCell(
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (isLow)
+                                              Container(
+                                                width: 8,
+                                                height: 8,
+                                                margin: const EdgeInsets.only(right: 8),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.red,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                            Text(
+                                              ing.name,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                color: isLow
+                                                    ? Colors.red.shade900
+                                                    : colorScheme.onSurface,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // كمية المخزون الحالي
+                                      DataCell(
+                                        Text(
+                                          '${ing.currentStock.toStringAsFixed(1)} ${ing.unitOfMeasurement}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: isLow
+                                                ? Colors.red.shade700
+                                                : colorScheme.onSurface,
+                                          ),
+                                        ),
+                                      ),
+                                      // تكلفة الوحدة
+                                      DataCell(
+                                        Text('${ing.costPrice.toStringAsFixed(2)} ج.م'),
+                                      ),
+                                      // القيمة الكلية للمخزون لهذا الصنف
+                                      DataCell(
+                                        Text(
+                                          '${ing.stockValue.toStringAsFixed(2)} ج.م',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.primary,
+                                          ),
+                                        ),
+                                      ),
+                                      // قائمة الإجراءات
+                                      DataCell(
+                                        PopupMenuButton<String>(
+                                          onSelected: (value) {
+                                            if (value == 'edit') {
+                                              _showAddEditDialog(context, ingredient: ing);
+                                            } else if (value == 'delete') {
+                                              _confirmDelete(context, ing);
+                                            } else if (value == 'waste') {
+                                              _showRecordWasteDialogForIngredient(context, ing);
+                                            }
+                                          },
+                                          itemBuilder: (context) => [
+                                            const PopupMenuItem(
+                                              value: 'waste',
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.delete_sweep_outlined,
+                                                    color: Colors.red,
+                                                  ),
+                                                  SizedBox(width: 8),
+                                                  Text('تسجيل هالك'),
+                                                ],
+                                              ),
+                                            ),
+                                            const PopupMenuItem(
+                                              value: 'edit',
+                                              child: Row(
+                                                children: [
+                                                  Icon(Icons.edit, color: Colors.blue),
+                                                  SizedBox(width: 8),
+                                                  Text('تعديل البيانات'),
+                                                ],
+                                              ),
+                                            ),
+                                            const PopupMenuItem(
+                                              value: 'delete',
+                                              child: Row(
+                                                children: [
+                                                  Icon(Icons.delete, color: Colors.red),
+                                                  SizedBox(width: 8),
+                                                  Text('حذف الصنف'),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue),
-                          tooltip: 'Edit',
-                          onPressed: () =>
-                              _showAddEditDialog(context, ingredient: ing),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.delete, color: theme.colorScheme.error),
-                          tooltip: 'Delete',
-                          onPressed: () => _confirmDelete(context, ing),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                );
-              },
+                ],
+              ),
             );
           }
           return const SizedBox.shrink();
@@ -146,37 +400,42 @@ class _InventoryView extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isEdit ? 'Edit Ingredient' : 'Add Ingredient'),
+        title: Text(isEdit ? 'تعديل بيانات الصنف' : 'إضافة صنف جديد للمخزون'),
         content: SizedBox(
           width: 400,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Name')),
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'اسم الصنف'),
+              ),
               const SizedBox(height: 12),
               TextField(
-                  controller: unitCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Unit (grams, pieces, kg...)')),
+                controller: unitCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'وحدة القياس (قطع، جرام، كيلو...)',
+                ),
+              ),
               const SizedBox(height: 12),
               TextField(
-                  controller: stockCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Current Stock')),
+                controller: stockCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'الكمية الحالية بالمخزن'),
+              ),
               const SizedBox(height: 12),
               TextField(
-                  controller: costCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Cost per Unit')),
+                controller: costCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'سعر تكلفة الوحدة (ج.م)'),
+              ),
             ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: const Text('إلغاء'),
           ),
           FilledButton(
             onPressed: () {
@@ -203,7 +462,7 @@ class _InventoryView extends StatelessWidget {
               }
               Navigator.pop(ctx);
             },
-            child: Text(isEdit ? 'Update' : 'Add'),
+            child: Text(isEdit ? 'تحديث' : 'إضافة'),
           ),
         ],
       ),
@@ -215,66 +474,273 @@ class _InventoryView extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Ingredient?'),
-        content: Text('Are you sure you want to delete "${ing.name}"?'),
+        title: const Text('تأكيد الحذف؟'),
+        content: Text('هل أنت متأكد من رغبتك في حذف الصنف "${ing.name}" نهائياً؟'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
             onPressed: () {
               bloc.add(DeleteIngredientRequested(ing.id));
               Navigator.pop(ctx);
             },
-            child: const Text('Delete'),
+            child: const Text('حذف'),
           ),
         ],
       ),
     );
   }
-}
 
-class _StockBadge extends StatelessWidget {
-  final bool isLow;
-  final String stockText;
-  const _StockBadge({required this.isLow, required this.stockText});
+  void _showRecordWasteDialogForIngredient(BuildContext context, IngredientEntity ingredient) {
+    final qtyCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    bool isSaving = false;
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: isLow ? Colors.red.shade50 : Colors.green.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isLow ? Colors.red.shade200 : Colors.green.shade200,
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: isLow ? Colors.red : Colors.green,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            stockText,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: isLow ? Colors.red.shade900 : Colors.green.shade900,
-            ),
-          ),
-        ],
-      ),
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('تسجيل هالك لـ ${ingredient.name}'),
+              content: SizedBox(
+                width: 400,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'الصنف: ${ingredient.name} (${ingredient.unitOfMeasurement})',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: qtyCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'الكمية الهالكة / Quantity',
+                        hintText: 'مثال: 1.5',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'السبب / ملاحظات',
+                        hintText: 'مثال: تالف أو منتهي الصلاحية',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                  child: const Text('إلغاء'),
+                ),
+                FilledButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final qty = double.tryParse(qtyCtrl.text) ?? 0.0;
+                          if (qty <= 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('الرجاء إدخال كمية صالحة أكبر من الصفر')),
+                            );
+                            return;
+                          }
+
+                          setState(() {
+                            isSaving = true;
+                          });
+
+                          try {
+                            final session = SessionManager.instance;
+                            await getIt<TransactionRepository>().recordWaste(
+                              userId: session.currentUserId,
+                              notes: notesCtrl.text.isNotEmpty ? notesCtrl.text : 'Recorded via Wastage UI',
+                              items: [
+                                WasteInput(
+                                  ingredientId: ingredient.id,
+                                  quantity: qty,
+                                ),
+                              ],
+                            );
+                            
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('✓ تم تسجيل الهالك بنجاح!')),
+                              );
+                              context.read<InventoryBloc>().add(const LoadIngredients());
+                              Navigator.pop(ctx);
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('خطأ: ${e.toString()}'),
+                                  backgroundColor: Theme.of(context).colorScheme.error,
+                                ),
+                              );
+                            }
+                          } finally {
+                            setState(() {
+                              isSaving = false;
+                            });
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('تسجيل'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showRecordWasteDialog(BuildContext context) {
+    final state = context.read<InventoryBloc>().state;
+    if (state is! InventoryLoaded || state.ingredients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا توجد أصناف في المخزون لتسجيل الهالك منها.')),
+      );
+      return;
+    }
+
+    final ingredients = state.ingredients;
+    IngredientEntity? selectedIngredient = ingredients.first;
+    final qtyCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('تسجيل الهالك / Record Waste'),
+              content: SizedBox(
+                width: 400,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<IngredientEntity>(
+                      value: selectedIngredient,
+                      decoration: const InputDecoration(labelText: 'اختر الصنف'),
+                      items: ingredients.map((ing) {
+                        return DropdownMenuItem(
+                          value: ing,
+                          child: Text('${ing.name} (${ing.unitOfMeasurement})'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          selectedIngredient = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: qtyCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'الكمية المستهلكة / Quantity',
+                        hintText: 'مثال: 1.5',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'ملاحظات (السبب)',
+                        hintText: 'مثال: تالف أو منتهي الصلاحية',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                  child: const Text('إلغاء'),
+                ),
+                FilledButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final qty = double.tryParse(qtyCtrl.text) ?? 0.0;
+                          if (qty <= 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('الرجاء إدخال كمية صالحة أكبر من الصفر')),
+                            );
+                            return;
+                          }
+                          if (selectedIngredient == null) return;
+
+                          setState(() {
+                            isSaving = true;
+                          });
+
+                          try {
+                            final session = SessionManager.instance;
+                            await getIt<TransactionRepository>().recordWaste(
+                              userId: session.currentUserId,
+                              notes: notesCtrl.text.isNotEmpty ? notesCtrl.text : 'Recorded via Wastage UI',
+                              items: [
+                                WasteInput(
+                                  ingredientId: selectedIngredient!.id,
+                                  quantity: qty,
+                                ),
+                              ],
+                            );
+                            
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('✓ تم تسجيل الهالك بنجاح!')),
+                              );
+                              context.read<InventoryBloc>().add(const LoadIngredients());
+                              Navigator.pop(ctx);
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('خطأ: ${e.toString()}'),
+                                  backgroundColor: Theme.of(context).colorScheme.error,
+                                ),
+                              );
+                            }
+                          } finally {
+                            setState(() {
+                              isSaving = false;
+                            });
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('تسجيل'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

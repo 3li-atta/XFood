@@ -6,6 +6,7 @@ import '../features/transactions/presentation/pages/pos_page.dart';
 import '../features/inventory/presentation/pages/inventory_page.dart';
 import '../features/meals/presentation/pages/meals_page.dart';
 import '../features/transactions/presentation/pages/transactions_page.dart';
+import '../features/transactions/presentation/pages/profit_loss_page.dart';
 import '../features/shifts/presentation/pages/shift_page.dart';
 import '../features/procurement/presentation/pages/purchase_page.dart';
 import '../features/treasury/presentation/pages/treasury_page.dart';
@@ -50,6 +51,7 @@ final appRouter = GoRouter(
       '/inventory',
       '/meals',
       '/transactions',
+      '/profit-loss',
       '/purchases',
       '/treasury',
       '/backup',
@@ -92,6 +94,11 @@ final appRouter = GoRouter(
       path: '/transactions',
       name: 'transactions',
       builder: (context, state) => const TransactionsPage(),
+    ),
+    GoRoute(
+      path: '/profit-loss',
+      name: 'profit-loss',
+      builder: (context, state) => const ProfitLossPage(),
     ),
     GoRoute(
       path: '/shifts',

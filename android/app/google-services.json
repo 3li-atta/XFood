@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "93863858769",
+    "project_id": "xfood-ffcc1",
+    "storage_bucket": "xfood-ffcc1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:93863858769:android:ecd903553f4f7ab5f05e70",
+        "android_client_info": {
+          "package_name": "com.example.xfood_pos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbIx56Cyds3lxMW2xs3wuE2zxq9d2m844"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

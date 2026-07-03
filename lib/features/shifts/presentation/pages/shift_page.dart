@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'dart:ui' as ui;
 import '../bloc/shift_bloc.dart';
 import '../../domain/entities/shift_entity.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/utils/session_manager.dart';
+import '../../../expenses/presentation/bloc/expense_bloc.dart';
+import '../../../expenses/presentation/bloc/expense_event.dart';
+import '../../../expenses/presentation/bloc/expense_state.dart';
 
 class ShiftPage extends StatelessWidget {
   const ShiftPage({super.key});
@@ -197,11 +201,11 @@ class _ShiftView extends StatelessWidget {
           _buildInfoRow('Cashier Name', shift.cashierName),
           _buildInfoRow('Opened At', DateFormat.yMd().add_jm().format(shift.openedAt)),
           const Divider(height: 32),
-          _buildInfoRow('Starting Cash (العهدة)', '\$${shift.startingCash.toStringAsFixed(2)}'),
-          _buildInfoRow('Total Sales (المبيعات)', '\$${shift.totalSales.toStringAsFixed(2)}', color: colorScheme.primary),
-          _buildInfoRow('Total Purchases (المشتريات)', '-\$${shift.totalPurchases.toStringAsFixed(2)}', color: colorScheme.error),
-          _buildInfoRow('Manual Cash In', '\$${shift.totalCashIn.toStringAsFixed(2)}'),
-          _buildInfoRow('Manual Cash Out', '-\$${shift.totalCashOut.toStringAsFixed(2)}'),
+          _buildInfoRow('Starting Cash (العهدة)', '${shift.startingCash.toStringAsFixed(2)} ج.م'),
+          _buildInfoRow('Total Sales (المبيعات)', '${shift.totalSales.toStringAsFixed(2)} ج.م', color: colorScheme.primary),
+          _buildInfoRow('Total Purchases (المشتريات)', '-${shift.totalPurchases.toStringAsFixed(2)} ج.م', color: colorScheme.error),
+          _buildInfoRow('Manual Cash In', '${shift.totalCashIn.toStringAsFixed(2)} ج.م'),
+          _buildInfoRow('Manual Cash Out', '-${shift.totalCashOut.toStringAsFixed(2)} ج.م'),
           const Divider(height: 32),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -211,13 +215,30 @@ class _ShiftView extends StatelessWidget {
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               Text(
-                '\$${expectedCash.toStringAsFixed(2)}',
+                '${expectedCash.toStringAsFixed(2)} ج.م',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: colorScheme.primary,
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: () => _showAddExpenseDialog(context, shift.id),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: colorScheme.primary, width: 1.5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: Icon(Icons.money_off, color: colorScheme.primary),
+              label: Text(
+                'تسجيل مصروف (إضافة مصروف)',
+                style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.primary),
+              ),
+            ),
           ),
           if (isMobile) const SizedBox(height: 32) else const Spacer(),
           SizedBox(
@@ -316,7 +337,7 @@ class _ShiftView extends StatelessWidget {
                 const SizedBox(height: 4),
                 if (!isOpen && s.variance != null)
                   Text(
-                    'Variance: \$${s.variance!.toStringAsFixed(2)}',
+                    'Variance: ${s.variance!.toStringAsFixed(2)} ج.م',
                     style: TextStyle(
                       fontSize: 11,
                       color: s.variance! < 0 ? Colors.red : (s.variance! > 0 ? Colors.blue : Colors.green),
@@ -351,6 +372,151 @@ class _ShiftView extends StatelessWidget {
     );
   }
 
+  void _showAddExpenseDialog(BuildContext context, int shiftId) {
+    final session = SessionManager.instance;
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+    String selectedCategory = 'نثريات';
+
+    final categories = ['رواتب', 'إيجار', 'فواتير', 'صيانة', 'نثريات'];
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return BlocProvider(
+          create: (_) => getIt<ExpenseBloc>(),
+          child: BlocConsumer<ExpenseBloc, ExpenseState>(
+            listener: (context, state) {
+              if (state is ExpenseSuccess) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(state.message),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                Navigator.pop(ctx);
+                context.read<ShiftBloc>().add(CheckActiveShift(session.currentUserId));
+              } else if (state is ExpenseFailure) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(state.errorMessage),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            builder: (context, state) {
+              final isLoading = state is ExpenseLoading;
+
+              return AlertDialog(
+                title: const Text(
+                  'إضافة مصروف تشغيلي',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                content: StatefulBuilder(
+                  builder: (context, setState) {
+                    return Directionality(
+                      textDirection: ui.TextDirection.rtl,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          DropdownButtonFormField<String>(
+                            value: selectedCategory,
+                            decoration: const InputDecoration(
+                              labelText: 'فئة المصروف',
+                            ),
+                            items: categories.map((cat) {
+                              return DropdownMenuItem<String>(
+                                value: cat,
+                                child: Text(cat),
+                              );
+                            }).toList(),
+                            onChanged: isLoading
+                                ? null
+                                : (val) {
+                                    if (val != null) {
+                                      setState(() {
+                                        selectedCategory = val;
+                                      });
+                                    }
+                                  },
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: amountController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: 'القيمة (ج.م)',
+                              hintText: '0.00',
+                            ),
+                            enabled: !isLoading,
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: noteController,
+                            maxLines: 2,
+                            decoration: const InputDecoration(
+                              labelText: 'ملاحظات',
+                              hintText: 'تفاصيل المصروف...',
+                            ),
+                            enabled: !isLoading,
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: isLoading ? null : () => Navigator.pop(ctx),
+                    child: const Text('إلغاء'),
+                  ),
+                  FilledButton(
+                    onPressed: isLoading
+                        ? null
+                        : () {
+                            final amountText = amountController.text.trim();
+                            final amount = double.tryParse(amountText);
+                            if (amount == null || amount <= 0) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text('الرجاء إدخال قيمة صالحة للمصروف'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            context.read<ExpenseBloc>().add(
+                                  AddExpense(
+                                    amount: amount,
+                                    category: selectedCategory,
+                                    note: noteController.text.trim(),
+                                    userId: session.currentUserId ?? 0,
+                                    activeShiftId: shiftId,
+                                  ),
+                                );
+                          },
+                    child: isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text('حفظ المصروف'),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
   void _showOpenShiftDialog(BuildContext context) {
     final controller = TextEditingController();
     showDialog(
@@ -361,7 +527,7 @@ class _ShiftView extends StatelessWidget {
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(
-            labelText: r'Starting Cash / العهدة ($)',
+            labelText: 'Starting Cash / العهدة (ج.م)',
             hintText: 'e.g. 100.00',
             border: OutlineInputBorder(),
           ),
@@ -399,13 +565,13 @@ class _ShiftView extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Expected cash in drawer: \$${expectedCash.toStringAsFixed(2)}'),
+            Text('Expected cash in drawer: ${expectedCash.toStringAsFixed(2)} ج.م'),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
-                labelText: r'Actual Cash Counted / العد الفعلي ($)',
+                labelText: 'Actual Cash Counted / العد الفعلي (ج.م)',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -459,18 +625,18 @@ class _ShiftView extends StatelessWidget {
             if (s.closedAt != null)
               _buildInfoRow('Closed At', DateFormat.yMd().add_jm().format(s.closedAt!)),
             const Divider(),
-            _buildInfoRow('Starting Cash', '\$${s.startingCash.toStringAsFixed(2)}'),
-            _buildInfoRow('Total Sales', '\$${s.totalSales.toStringAsFixed(2)}'),
-            _buildInfoRow('Total Purchases', '-\$${s.totalPurchases.toStringAsFixed(2)}'),
-            _buildInfoRow('Total Cash In', '\$${s.totalCashIn.toStringAsFixed(2)}'),
-            _buildInfoRow('Total Cash Out', '-\$${s.totalCashOut.toStringAsFixed(2)}'),
+            _buildInfoRow('Starting Cash', '${s.startingCash.toStringAsFixed(2)} ج.م'),
+            _buildInfoRow('Total Sales', '${s.totalSales.toStringAsFixed(2)} ج.م'),
+            _buildInfoRow('Total Purchases', '-${s.totalPurchases.toStringAsFixed(2)} ج.م'),
+            _buildInfoRow('Total Cash In', '${s.totalCashIn.toStringAsFixed(2)} ج.م'),
+            _buildInfoRow('Total Cash Out', '-${s.totalCashOut.toStringAsFixed(2)} ج.م'),
             if (s.expectedClosingCash != null) ...[
               const Divider(),
-              _buildInfoRow('Expected Closing Cash', '\$${s.expectedClosingCash!.toStringAsFixed(2)}'),
-              _buildInfoRow('Actual Closing Cash', '\$${s.actualClosingCash!.toStringAsFixed(2)}'),
+              _buildInfoRow('Expected Closing Cash', '${s.expectedClosingCash!.toStringAsFixed(2)} ج.م'),
+              _buildInfoRow('Actual Closing Cash', '${s.actualClosingCash!.toStringAsFixed(2)} ج.م'),
               _buildInfoRow(
                 'Variance (العجز/الزيادة)',
-                '\$${s.variance!.toStringAsFixed(2)}',
+                '${s.variance!.toStringAsFixed(2)} ج.م',
                 color: s.variance! < 0 ? Colors.red : (s.variance! > 0 ? Colors.blue : Colors.green),
               ),
             ],

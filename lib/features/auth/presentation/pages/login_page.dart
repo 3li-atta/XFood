@@ -35,6 +35,13 @@ class _LoginView extends StatelessWidget {
                 backgroundColor: Theme.of(context).colorScheme.error,
               ),
             );
+          } else if (state is PasswordRecoverySuccess) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✓ Password reset successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
           }
         },
         child: const Center(
@@ -75,32 +82,54 @@ class _LoginCardState extends State<_LoginCard> {
 
   /// Load saved credentials from SharedPreferences on startup.
   Future<void> _loadSavedCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    final remembered = prefs.getBool(_keyRememberMe) ?? false;
-    if (remembered) {
-      final savedUsername = prefs.getString(_keySavedUsername) ?? '';
-      final savedPassword = prefs.getString(_keySavedPassword) ?? '';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final remembered = prefs.getBool(_keyRememberMe) ?? false;
+      if (remembered) {
+        final savedUsername = prefs.getString(_keySavedUsername) ?? '';
+        final savedPassword = prefs.getString(_keySavedPassword) ?? '';
+        if (mounted) {
+          setState(() {
+            _rememberMe = true;
+            _usernameController.text = savedUsername;
+            _passwordController.text = savedPassword;
+          });
+        }
+      }
+    } catch (e) {
       if (mounted) {
-        setState(() {
-          _rememberMe = true;
-          _usernameController.text = savedUsername;
-          _passwordController.text = savedPassword;
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load credentials: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     }
   }
 
   /// Persist or clear credentials based on the Remember Me toggle.
   Future<void> _saveOrClearCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (_rememberMe) {
-      await prefs.setBool(_keyRememberMe, true);
-      await prefs.setString(_keySavedUsername, _usernameController.text.trim());
-      await prefs.setString(_keySavedPassword, _passwordController.text);
-    } else {
-      await prefs.remove(_keyRememberMe);
-      await prefs.remove(_keySavedUsername);
-      await prefs.remove(_keySavedPassword);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_rememberMe) {
+        await prefs.setBool(_keyRememberMe, true);
+        await prefs.setString(_keySavedUsername, _usernameController.text.trim());
+        await prefs.setString(_keySavedPassword, _passwordController.text);
+      } else {
+        await prefs.remove(_keyRememberMe);
+        await prefs.remove(_keySavedUsername);
+        await prefs.remove(_keySavedPassword);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save credentials: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
     }
   }
 

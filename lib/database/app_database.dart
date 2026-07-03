@@ -14,6 +14,7 @@ import 'tables/shifts_table.dart';
 import 'tables/purchase_invoices_table.dart';
 import 'tables/purchase_items_table.dart';
 import 'tables/treasury_transactions_table.dart';
+import 'tables/expenses_table.dart';
 
 import 'daos/user_dao.dart';
 import 'daos/ingredient_dao.dart';
@@ -23,6 +24,7 @@ import 'daos/transaction_dao.dart';
 import 'daos/shift_dao.dart';
 import 'daos/purchase_dao.dart';
 import 'daos/treasury_dao.dart';
+import 'daos/expense_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -42,6 +44,7 @@ part 'app_database.g.dart';
     PurchaseInvoices,
     PurchaseItems,
     TreasuryTransactions,
+    Expenses,
   ],
   daos: [
     UserDao,
@@ -52,6 +55,7 @@ part 'app_database.g.dart';
     ShiftDao,
     PurchaseDao,
     TreasuryDao,
+    ExpenseDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -62,7 +66,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -195,6 +199,9 @@ class AppDatabase extends _$AppDatabase {
             }
 
             await customStatement('PRAGMA foreign_keys = ON');
+          }
+          if (from < 3) {
+            await m.create(expenses);
           }
         },
         beforeOpen: (details) async {

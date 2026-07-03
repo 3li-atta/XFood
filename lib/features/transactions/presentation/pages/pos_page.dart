@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../bloc/pos_bloc.dart';
 import '../../../meals/domain/entities/meal_entity.dart';
 import '../../../meals/domain/repositories/meal_repository.dart';
@@ -11,6 +12,8 @@ import '../../../../core/utils/session_manager.dart';
 import '../../../shifts/presentation/bloc/shift_bloc.dart';
 import '../../../../core/services/update_service.dart';
 import '../../../../core/presentation/widgets/update_dialog.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../auth/presentation/pages/login_page.dart';
 
 /// POS Screen — main cashier interface with menu grid + cart sidebar.
 class PosPage extends StatelessWidget {
@@ -206,7 +209,7 @@ class _PersistentBottomCart extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '\$${state.totalAmount.toStringAsFixed(2)}',
+                      '${state.totalAmount.toStringAsFixed(2)} ج.م',
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: colorScheme.primary,
@@ -356,7 +359,7 @@ class _CartModalContent extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                           )),
                       Text(
-                        '\$${state.totalAmount.toStringAsFixed(2)}',
+                        '${state.totalAmount.toStringAsFixed(2)} ج.م',
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: colorScheme.primary,
@@ -416,138 +419,211 @@ class _CartModalContent extends StatelessWidget {
 
 /// Left navigation rail with route links.
 /// Admin sees all destinations; cashier only sees POS.
-class _NavigationRail extends StatelessWidget {
+class _NavigationRail extends StatefulWidget {
   const _NavigationRail();
+
+  @override
+  State<_NavigationRail> createState() => _NavigationRailState();
+}
+
+class _NavigationRailState extends State<_NavigationRail> {
+  bool _isExpanded = false;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final session = SessionManager.instance;
 
-    // Build destinations based on role
-    final destinations = <NavigationRailDestination>[
-      const NavigationRailDestination(
-        icon: Icon(Icons.point_of_sale_outlined),
-        selectedIcon: Icon(Icons.point_of_sale),
-        label: Text('POS'),
-      ),
-      const NavigationRailDestination(
-        icon: Icon(Icons.access_time_outlined),
-        selectedIcon: Icon(Icons.access_time),
-        label: Text('Shifts'),
-      ),
+    final items = [
+      _NavItem(icon: Icons.point_of_sale, label: 'القائمة', route: '/pos'),
+      _NavItem(icon: Icons.access_time, label: 'الورديات', route: '/shifts'),
     ];
 
     if (session.isAdmin) {
-      destinations.addAll(const [
-        NavigationRailDestination(
-          icon: Icon(Icons.inventory_2_outlined),
-          selectedIcon: Icon(Icons.inventory_2),
-          label: Text('Stock'),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.restaurant_menu_outlined),
-          selectedIcon: Icon(Icons.restaurant_menu),
-          label: Text('Meals'),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.receipt_long_outlined),
-          selectedIcon: Icon(Icons.receipt_long),
-          label: Text('History'),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.shopping_bag_outlined),
-          selectedIcon: Icon(Icons.shopping_bag),
-          label: Text('Purchases'),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.account_balance_wallet_outlined),
-          selectedIcon: Icon(Icons.account_balance_wallet),
-          label: Text('Treasury'),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.cloud_sync_outlined),
-          selectedIcon: Icon(Icons.cloud_sync),
-          label: Text('Backup'),
-        ),
+      items.addAll([
+        _NavItem(icon: Icons.inventory_2, label: 'المخزون', route: '/inventory'),
+        _NavItem(icon: Icons.restaurant_menu, label: 'الوجبات', route: '/meals'),
+        _NavItem(icon: Icons.receipt_long, label: 'السجل', route: '/transactions'),
+        _NavItem(icon: Icons.analytics, label: 'التقارير', route: '/profit-loss'),
+        _NavItem(icon: Icons.shopping_bag, label: 'المشتريات', route: '/purchases'),
+        _NavItem(icon: Icons.account_balance_wallet, label: 'الخزينة', route: '/treasury'),
+        _NavItem(icon: Icons.cloud_sync, label: 'النسخ الاحتياطي', route: '/backup'),
       ]);
     }
 
-    return NavigationRail(
-      selectedIndex: 0,
-      backgroundColor: colorScheme.surface,
-      onDestinationSelected: (index) {
-        if (session.isAdmin) {
-          switch (index) {
-            case 0:
-              break; // Already on POS
-            case 1:
-              context.go('/shifts');
-              break;
-            case 2:
-              context.go('/inventory');
-              break;
-            case 3:
-              context.go('/meals');
-              break;
-            case 4:
-              context.go('/transactions');
-              break;
-            case 5:
-              context.go('/purchases');
-              break;
-            case 6:
-              context.go('/treasury');
-              break;
-            case 7:
-              context.go('/backup');
-              break;
-          }
-        } else {
-          switch (index) {
-            case 0:
-              break; // POS
-            case 1:
-              context.go('/shifts');
-              break;
-          }
-        }
-      },
-      leading: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Column(
-          children: [
-            Icon(Icons.restaurant, size: 32, color: colorScheme.primary),
-            const SizedBox(height: 4),
-            Text(
-              session.currentUser?.username ?? '',
-              style: TextStyle(
-                fontSize: 10,
-                color: colorScheme.onSurfaceVariant,
-              ),
+    final currentRoute = GoRouterState.of(context).uri.path;
+    int selectedIndex = 0;
+    for (int i = 0; i < items.length; i++) {
+      if (items[i].route == currentRoute) {
+        selectedIndex = i;
+        break;
+      }
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      width: _isExpanded ? 220 : 80,
+      color: colorScheme.surface,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Row(
+              mainAxisAlignment: _isExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+              children: [
+                if (_isExpanded) const SizedBox(width: 16),
+                IconButton(
+                  icon: Icon(Icons.menu, color: colorScheme.primary, size: 28),
+                  onPressed: () {
+                    setState(() {
+                      _isExpanded = !_isExpanded;
+                    });
+                  },
+                ),
+                if (_isExpanded) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Text(
+                        session.currentUser?.username ?? 'نظام البيع',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.primary,
+                          fontSize: 16,
+                        ),
+                        maxLines: 1,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ],
-        ),
-      ),
-      trailing: Expanded(
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: IconButton(
-              icon: const Icon(Icons.logout),
-              tooltip: 'Logout',
-              onPressed: () {
-                SessionManager.instance.clear();
-                context.go('/login');
+          ),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView.builder(
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                final isSelected = selectedIndex == index;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  child: InkWell(
+                    onTap: () {
+                      if (item.route != currentRoute) {
+                        context.go(item.route);
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? colorScheme.primary.withValues(alpha: 0.12)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: _isExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            item.icon,
+                            color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                            size: 24,
+                          ),
+                          if (_isExpanded) ...[
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Text(
+                                  item.label,
+                                  style: TextStyle(
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                );
               },
             ),
           ),
-        ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: InkWell(
+              onTap: () async {
+                getIt<AuthBloc>().add(const LogoutRequested());
+                
+                SessionManager.instance.clear();
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.clear();
+
+                if (context.mounted) {
+                  await Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const LoginPage()),
+                    (route) => false,
+                  );
+                }
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: _isExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.logout, color: Colors.redAccent, size: 24),
+                    if (_isExpanded) ...[
+                      const SizedBox(width: 16),
+                      const Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Text(
+                            'تسجيل الخروج',
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                            maxLines: 1,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
-      destinations: destinations,
     );
   }
+}
+
+class _NavItem {
+  final IconData icon;
+  final String label;
+  final String route;
+
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    required this.route,
+  });
 }
 
 /// Center: Grid of available meals from the menu.
@@ -697,21 +773,29 @@ class _MenuGridState extends State<_MenuGrid> {
                       .toList();
                 }
 
-                final screenWidth = MediaQuery.of(context).size.width;
-                final crossAxisCount = screenWidth < 600 ? 2 : (screenWidth < 1000 ? 3 : 4);
-                final childAspectRatio = screenWidth < 600 ? 1.3 : 1.2;
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final availableWidth = constraints.maxWidth;
+                    final crossAxisCount = availableWidth < 240
+                        ? 1
+                        : (availableWidth < 480 ? 2 : (availableWidth < 800 ? 3 : 4));
+                    final childAspectRatio = availableWidth < 240
+                        ? 2.2
+                        : (availableWidth < 480 ? 0.95 : 1.2);
 
-                return GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    childAspectRatio: childAspectRatio,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                  ),
-                  itemCount: meals.length,
-                  itemBuilder: (context, index) =>
-                      _MealCard(meal: meals[index]),
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(16),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        childAspectRatio: childAspectRatio,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
+                      itemCount: meals.length,
+                      itemBuilder: (context, index) =>
+                          _MealCard(meal: meals[index]),
+                    );
+                  },
                 );
               },
             ),
@@ -765,7 +849,7 @@ class _MealCard extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '\$${meal.sellingPrice.toStringAsFixed(2)}',
+                '${meal.sellingPrice.toStringAsFixed(2)} ج.م',
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: colorScheme.primary,
                   fontWeight: FontWeight.bold,
@@ -886,7 +970,7 @@ class _CartSidebar extends StatelessWidget {
                               fontWeight: FontWeight.bold,
                             )),
                         Text(
-                          '\$${state.totalAmount.toStringAsFixed(2)}',
+                          '${state.totalAmount.toStringAsFixed(2)} ج.م',
                           style: theme.textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: colorScheme.primary,
@@ -973,7 +1057,7 @@ class _CartItemTile extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                '\$${item.lineTotal.toStringAsFixed(2)}',
+                '${item.lineTotal.toStringAsFixed(2)} ج.م',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: colorScheme.primary,
@@ -987,7 +1071,7 @@ class _CartItemTile extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '\$${item.meal.sellingPrice.toStringAsFixed(2)} × ${item.quantity.toStringAsFixed(0)}',
+                '${item.meal.sellingPrice.toStringAsFixed(2)} ج.م × ${item.quantity.toStringAsFixed(0)}',
                 style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
               ),
               Row(

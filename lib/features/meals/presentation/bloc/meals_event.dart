@@ -51,3 +51,13 @@ class DeactivateMealRequested extends MealsEvent {
   @override
   List<Object?> get props => [id];
 }
+
+class ToggleMealActiveRequested extends MealsEvent {
+  final int id;
+  final bool isActive;
+
+  const ToggleMealActiveRequested(this.id, this.isActive);
+
+  @override
+  List<Object?> get props => [id, isActive];
+}

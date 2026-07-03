@@ -97,7 +97,7 @@ class _TreasuryView extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '\$${state.balance.toStringAsFixed(2)}',
+                            '${state.balance.toStringAsFixed(2)} ج.م',
                             style: theme.textTheme.headlineLarge?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: colorScheme.onPrimaryContainer,
@@ -197,7 +197,7 @@ class _TreasuryView extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    '${isIncome ? "+" : "-"}\$${tx.amount.toStringAsFixed(2)}',
+                                    '${isIncome ? "+" : "-"}${tx.amount.toStringAsFixed(2)} ج.م',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
@@ -205,7 +205,7 @@ class _TreasuryView extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    'Bal: \$${tx.balanceAfter.toStringAsFixed(2)}',
+                                    'Bal: ${tx.balanceAfter.toStringAsFixed(2)} ج.م',
                                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                                   ),
                                 ],
@@ -239,7 +239,7 @@ class _TreasuryView extends StatelessWidget {
               controller: amountController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
-                labelText: r'Amount ($)',
+                labelText: 'المبلغ (ج.م)',
                 border: OutlineInputBorder(),
               ),
             ),

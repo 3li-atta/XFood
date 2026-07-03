@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'router.dart';
 
 /// Root widget for the XFood POS application.
@@ -16,6 +17,15 @@ class XFoodApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'XFood POS',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en'),
+        Locale('ar'),
+      ],
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.light,

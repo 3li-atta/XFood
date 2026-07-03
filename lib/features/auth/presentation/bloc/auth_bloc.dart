@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/usecases/login_usecase.dart';
 import '../../domain/usecases/recover_password_usecase.dart';
@@ -43,12 +44,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  void _onLogoutRequested(
+  Future<void> _onLogoutRequested(
     LogoutRequested event,
     Emitter<AuthState> emit,
-  ) {
-    SessionManager.instance.clear();
-    emit(const AuthUnauthenticated());
+  ) async {
+    emit(const AuthLoading());
+    try {
+      SessionManager.instance.clear();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      emit(const AuthUnauthenticated());
+    } catch (e) {
+      emit(AuthError(e.toString()));
+    }
   }
 
   Future<void> _onPasswordRecoveryRequested(

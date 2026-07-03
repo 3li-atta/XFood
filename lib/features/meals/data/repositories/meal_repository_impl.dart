@@ -41,6 +41,13 @@ class MealRepositoryImpl implements MealRepository {
   }
 
   @override
+  Stream<List<MealEntity>> watchAllMeals() {
+    return _mealDao.watchAllMeals().map(
+          (rows) => rows.map(_mapMealToEntity).toList(),
+        );
+  }
+
+  @override
   Future<MealEntity> getMealById(int id) async {
     try {
       final row = await _mealDao.getById(id);
@@ -70,12 +77,14 @@ class MealRepositoryImpl implements MealRepository {
     String? name,
     double? sellingPrice,
     String? category,
+    bool? isActive,
   }) {
     final companion = MealsCompanion(
       name: name != null ? Value(name) : const Value.absent(),
       sellingPrice:
           sellingPrice != null ? Value(sellingPrice) : const Value.absent(),
       category: category != null ? Value(category) : const Value.absent(),
+      isActive: isActive != null ? Value(isActive) : const Value.absent(),
       updatedAt: Value(DateTime.now()),
     );
     return _mealDao.updateMeal(mealId, companion);
@@ -84,6 +93,11 @@ class MealRepositoryImpl implements MealRepository {
   @override
   Future<bool> deactivateMeal(int mealId) {
     return _mealDao.deactivateMeal(mealId);
+  }
+
+  @override
+  Future<bool> toggleMealActive(int mealId, bool isActive) {
+    return _mealDao.toggleMealActive(mealId, isActive);
   }
 
   @override

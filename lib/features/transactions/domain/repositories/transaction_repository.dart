@@ -1,5 +1,6 @@
 import '../entities/transaction_entity.dart';
 import '../entities/transaction_item_entity.dart';
+import '../entities/profit_loss_report_entity.dart';
 
 /// Abstract repository contract for transaction operations.
 abstract class TransactionRepository {
@@ -35,6 +36,15 @@ abstract class TransactionRepository {
     required String? notes,
     required List<WasteInput> items,
   });
+
+  /// Get Profit & Loss Report for a date range.
+  Future<ProfitLossReportEntity> getProfitLossReport(DateTime start, DateTime end);
+
+  /// Refund a sale transaction.
+  Future<bool> refundSaleTransaction(int transactionId, int userId);
+
+  /// Check if a transaction is refunded.
+  Future<bool> isTransactionRefunded(int transactionId);
 }
 
 /// Input DTO for sale items.

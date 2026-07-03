@@ -260,6 +260,166 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
       return txnId;
     });
   }
+
+  /// Calculate Cost of Goods Sold (COGS) for sales in a date range using joins.
+  Future<double> getCOGSForDateRange(DateTime start, DateTime end) async {
+    // 1. Calculate sales COGS
+    final saleQuery = select(transactionItems).join([
+      innerJoin(transactions, transactions.id.equalsExp(transactionItems.transactionId)),
+      innerJoin(recipes, recipes.mealId.equalsExp(transactionItems.mealId)),
+      innerJoin(ingredients, ingredients.id.equalsExp(recipes.ingredientId)),
+    ])
+      ..where(transactions.type.equals('sale') &
+          transactions.createdAt.isBiggerOrEqualValue(start) &
+          transactions.createdAt.isSmallerOrEqualValue(end));
+
+    final saleRows = await saleQuery.get();
+    double saleCOGS = 0.0;
+    for (final row in saleRows) {
+      final itemQty = row.readTable(transactionItems).quantity;
+      final recipeQty = row.readTable(recipes).quantityRequired;
+      final cost = row.readTable(ingredients).costPrice;
+      saleCOGS += itemQty * recipeQty * cost;
+    }
+
+    // 2. Calculate refund COGS
+    final refundQuery = select(transactionItems).join([
+      innerJoin(transactions, transactions.id.equalsExp(transactionItems.transactionId)),
+      innerJoin(recipes, recipes.mealId.equalsExp(transactionItems.mealId)),
+      innerJoin(ingredients, ingredients.id.equalsExp(recipes.ingredientId)),
+    ])
+      ..where(transactions.type.equals('refund') &
+          transactions.createdAt.isBiggerOrEqualValue(start) &
+          transactions.createdAt.isSmallerOrEqualValue(end));
+
+    final refundRows = await refundQuery.get();
+    double refundCOGS = 0.0;
+    for (final row in refundRows) {
+      final itemQty = row.readTable(transactionItems).quantity;
+      final recipeQty = row.readTable(recipes).quantityRequired;
+      final cost = row.readTable(ingredients).costPrice;
+      refundCOGS += itemQty * recipeQty * cost;
+    }
+
+    return saleCOGS - refundCOGS;
+  }
+
+  /// Check if a sale transaction has already been refunded.
+  Future<bool> isTransactionRefunded(int transactionId) async {
+    final query = select(transactions)
+      ..where((t) => t.type.equals('refund') & t.notes.like('%Refund for Transaction #$transactionId%'));
+    final list = await query.get();
+    return list.isNotEmpty;
+  }
+
+  /// Refund a sale transaction, restoring stock, adding treasury cash_out, and updating shift sales.
+  Future<bool> refundSaleTransaction({
+    required int transactionId,
+    required int userId,
+  }) {
+    return transaction(() async {
+      // 1. Get currently active open shift
+      final activeShift = await (select(shifts)..where((s) => s.status.equals('open'))).getSingleOrNull();
+      if (activeShift == null) {
+        throw Exception('لا يمكن إرجاع طلب بدون وجود وردية مفتوحة نشطة.');
+      }
+
+      // 2. Fetch original transaction
+      final origTxn = await (select(transactions)..where((t) => t.id.equals(transactionId))).getSingleOrNull();
+      if (origTxn == null) {
+        throw Exception('الطلب الأصلي غير موجود.');
+      }
+      if (origTxn.type != 'sale') {
+        throw Exception('يمكن فقط عمل مرتجع لطلبات المبيعات.');
+      }
+
+      // 3. Check if already refunded
+      final alreadyRefunded = await isTransactionRefunded(transactionId);
+      if (alreadyRefunded) {
+        throw Exception('هذا الطلب تم إرجاعه بالفعل.');
+      }
+
+      final refundAmount = origTxn.totalAmount;
+
+      // 4. Create refund transaction header
+      final refundTxnId = await into(transactions).insert(
+        TransactionsCompanion.insert(
+          userId: userId,
+          shiftId: Value(activeShift.id),
+          type: 'refund',
+          totalAmount: refundAmount,
+          notes: Value('Refund for Transaction #$transactionId'),
+        ),
+      );
+
+      // 5. Fetch items from original transaction
+      final origItems = await getItemsForTransaction(transactionId);
+      for (final item in origItems) {
+        // Insert line item record for refund
+        await into(transactionItems).insert(
+          TransactionItemsCompanion.insert(
+            transactionId: refundTxnId,
+            mealId: Value(item.mealId),
+            quantity: item.quantity,
+            priceAtTime: item.priceAtTime,
+            itemType: 'meal',
+          ),
+        );
+
+        // Reverse stock (add back ingredients)
+        if (item.mealId != null) {
+          final recipeRows = await (select(recipes)
+                ..where((r) => r.mealId.equals(item.mealId!)))
+              .get();
+
+          for (final recipe in recipeRows) {
+            final incrementAmount = recipe.quantityRequired * item.quantity;
+            final ing = await (select(ingredients)
+                  ..where((i) => i.id.equals(recipe.ingredientId)))
+                .getSingle();
+            final updatedStock = ing.currentStock + incrementAmount;
+
+            await (update(ingredients)..where((i) => i.id.equals(recipe.ingredientId))).write(
+              IngredientsCompanion(
+                currentStock: Value(updatedStock),
+                updatedAt: Value(DateTime.now()),
+              ),
+            );
+          }
+        }
+      }
+
+      // 6. Record treasury cash out (reversal of income) co-transactionally
+      final latest = await (select(treasuryTransactions)
+            ..orderBy([(t) => OrderingTerm.desc(t.id)])
+            ..limit(1))
+          .getSingleOrNull();
+      final prevBalance = latest?.balanceAfter ?? 0.0;
+      final newBalance = prevBalance - refundAmount;
+
+      await into(treasuryTransactions).insert(
+        TreasuryTransactionsCompanion.insert(
+          shiftId: Value(activeShift.id),
+          userId: userId,
+          type: 'cash_out',
+          amount: refundAmount,
+          referenceType: const Value('transaction'),
+          referenceId: Value(refundTxnId),
+          description: Value('Refund for Transaction #$transactionId'),
+          balanceAfter: newBalance,
+        ),
+      );
+
+      // 7. Update Shift totalSales (subtract refund amount) co-transactionally
+      await (update(shifts)..where((s) => s.id.equals(activeShift.id))).write(
+        ShiftsCompanion(
+          totalSales: Value(activeShift.totalSales - refundAmount),
+        ),
+      );
+
+      return true;
+    });
+  }
 }
 
 // ── DTOs with Validation Guards (V-05) ─────────────────────────

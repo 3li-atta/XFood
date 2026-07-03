@@ -1,13 +1,15 @@
 name: xfood_pos
 description: Offline-first Flutter POS application for food service.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
 
   # Database
@@ -34,7 +36,7 @@ dependencies:
   shared_preferences: ^2.2.2
 
   # Utilities
-  intl: ^0.19.0
+  intl: ^0.20.2
   uuid: ^4.3.3
 
   # Cloud Backup & Restore
@@ -47,6 +49,7 @@ dependencies:
   package_info_plus: ^8.0.0
   dio: ^5.5.0
   open_filex: ^4.5.0
+  workmanager: ^0.9.0+3
 
 dev_dependencies:
   flutter_test:
