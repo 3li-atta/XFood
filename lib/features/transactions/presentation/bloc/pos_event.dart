@@ -49,9 +49,10 @@ class ClearCart extends PosEvent {
 class CompleteSale extends PosEvent {
   final int userId;
   final String? notes;
+  final double discountPercentage;
 
-  const CompleteSale({required this.userId, this.notes});
+  const CompleteSale({required this.userId, this.notes, this.discountPercentage = 0.0});
 
   @override
-  List<Object?> get props => [userId, notes];
+  List<Object?> get props => [userId, notes, discountPercentage];
 }

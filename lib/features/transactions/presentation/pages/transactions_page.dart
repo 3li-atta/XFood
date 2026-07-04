@@ -223,6 +223,12 @@ class _TransactionsPageState extends State<TransactionsPage> {
     final items = await _repo.getTransactionItems(txn.id, type: txn.type);
     final isRefunded = txn.type == 'sale' ? await _repo.isTransactionRefunded(txn.id) : false;
 
+    // Parse discount tag
+    final discountRegExp = RegExp(r'\[Discount:\s*([\d\.]+)%\]');
+    final match = discountRegExp.firstMatch(txn.notes ?? '');
+    final discountPercentage = match != null ? double.tryParse(match.group(1) ?? '0.0') ?? 0.0 : 0.0;
+    final cleanNotes = txn.notes?.replaceAll(discountRegExp, '').trim();
+
     if (!context.mounted) return;
 
     await showDialog(
@@ -236,7 +242,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('التاريخ: ${DateFormat('yyyy-MM-dd HH:mm').format(txn.createdAt)}'),
-              if (txn.notes != null) Text('ملاحظات: ${txn.notes}'),
+              if (cleanNotes != null && cleanNotes.isNotEmpty) Text('ملاحظات: $cleanNotes'),
               const SizedBox(height: 12),
               const Divider(),
               ...items.map((item) => ListTile(
@@ -246,10 +252,26 @@ class _TransactionsPageState extends State<TransactionsPage> {
                     trailing:
                         Text('${item.lineTotal.toStringAsFixed(2)} ج.م'),
                   )),
+              if (discountPercentage > 0) ...[
+                const Divider(),
+                ListTile(
+                  dense: true,
+                  title: const Text('الإجمالي قبل الخصم (Subtotal)'),
+                  trailing: Text('${(txn.totalAmount / (1 - discountPercentage / 100)).toStringAsFixed(2)} ج.م'),
+                ),
+                ListTile(
+                  dense: true,
+                  title: Text('خصم (Discount) ($discountPercentage%)'),
+                  trailing: Text(
+                    '- ${( (txn.totalAmount / (1 - discountPercentage / 100)) - txn.totalAmount ).toStringAsFixed(2)} ج.م',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+              ],
               const Divider(),
               ListTile(
                 dense: true,
-                title: const Text('الإجمالي',
+                title: const Text('الإجمالي (Total)',
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 trailing: Text('${txn.totalAmount.toStringAsFixed(2)} ج.م',
                     style: const TextStyle(fontWeight: FontWeight.bold)),

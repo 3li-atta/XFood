@@ -83,6 +83,7 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
     required int? shiftId,
     required String? notes,
     required List<SaleLineItem> lineItems,
+    double discountPercentage = 0.0,
   }) {
     return transaction(() async {
       // 1. Shift validation
@@ -99,6 +100,9 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
       for (final item in lineItems) {
         calculatedTotal += item.quantity * item.priceAtTime;
       }
+      if (discountPercentage > 0) {
+        calculatedTotal = calculatedTotal * (1 - discountPercentage / 100);
+      }
 
       // 3. Insert transaction header
       final txnId = await into(transactions).insert(
@@ -107,7 +111,9 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
           shiftId: Value(shiftId),
           type: 'sale',
           totalAmount: calculatedTotal,
-          notes: Value(notes),
+          notes: Value(discountPercentage > 0
+              ? '[Discount: ${discountPercentage.toStringAsFixed(0)}%]${notes != null ? " $notes" : ""}'
+              : notes),
         ),
       );
 

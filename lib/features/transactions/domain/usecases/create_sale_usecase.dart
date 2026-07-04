@@ -9,6 +9,7 @@ class CreateSaleParams {
   final double totalAmount;
   final String? notes;
   final List<SaleInput> items;
+  final double discountPercentage;
 
   const CreateSaleParams({
     required this.userId,
@@ -16,6 +17,7 @@ class CreateSaleParams {
     required this.totalAmount,
     this.notes,
     required this.items,
+    this.discountPercentage = 0.0,
   });
 }
 
@@ -33,6 +35,7 @@ class CreateSaleUseCase implements UseCase<int, CreateSaleParams> {
       totalAmount: params.totalAmount,
       notes: params.notes,
       items: params.items,
+      discountPercentage: params.discountPercentage,
     );
   }
 }

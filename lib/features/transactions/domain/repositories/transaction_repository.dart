@@ -28,6 +28,7 @@ abstract class TransactionRepository {
     required double totalAmount,
     required String? notes,
     required List<SaleInput> items,
+    double discountPercentage = 0.0,
   });
 
   /// Record waste.

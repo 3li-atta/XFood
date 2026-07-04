@@ -374,14 +374,7 @@ class _CartModalContent extends StatelessWidget {
                     child: FilledButton.icon(
                       onPressed: state.hasItems &&
                               state.status != PosStatus.processing
-                          ? () {
-                              context.read<PosBloc>().add(
-                                    CompleteSale(
-                                      userId: SessionManager
-                                          .instance.currentUserId,
-                                    ),
-                                  );
-                            }
+                          ? () => _showCheckoutDialog(context, state.totalAmount)
                           : null,
                       icon: state.status == PosStatus.processing
                           ? const SizedBox(
@@ -985,14 +978,7 @@ class _CartSidebar extends StatelessWidget {
                       child: FilledButton.icon(
                         onPressed: state.hasItems &&
                                 state.status != PosStatus.processing
-                            ? () {
-                                context.read<PosBloc>().add(
-                                      CompleteSale(
-                                        userId: SessionManager
-                                            .instance.currentUserId,
-                                      ),
-                                    );
-                              }
+                            ? () => _showCheckoutDialog(context, state.totalAmount)
                             : null,
                         icon: state.status == PosStatus.processing
                             ? const SizedBox(
@@ -1116,4 +1102,145 @@ class _CartItemTile extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showCheckoutDialog(BuildContext parentCtx, double subtotal) {
+  final discountController = TextEditingController(text: '0');
+  final notesController = TextEditingController();
+  double discountPercentage = 0.0;
+
+  showDialog(
+    context: parentCtx,
+    builder: (dialogCtx) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          final discountValue = subtotal * (discountPercentage / 100);
+          final netTotal = subtotal - discountValue;
+
+          void updateDiscount(double val) {
+            setState(() {
+              discountPercentage = val;
+              discountController.text = val.toStringAsFixed(0);
+            });
+          }
+
+          return AlertDialog(
+            title: const Text('إتمام عملية البيع والخصم', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+            content: Container(
+              width: MediaQuery.of(context).size.width * 0.9,
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('${subtotal.toStringAsFixed(2)} ج.م', style: const TextStyle(fontSize: 16)),
+                      const Text('الإجمالي قبل الخصم:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('- ${discountValue.toStringAsFixed(2)} ج.م', style: const TextStyle(fontSize: 16, color: Colors.red)),
+                      const Text('قيمة الخصم:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('${netTotal.toStringAsFixed(2)} ج.م',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                      const Text('الصافي المستحق:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: discountController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textAlign: TextAlign.center,
+                    decoration: const InputDecoration(
+                      labelText: 'نسبة الخصم (%)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.percent),
+                    ),
+                    onChanged: (val) {
+                      final parsed = double.tryParse(val) ?? 0.0;
+                      setState(() {
+                        discountPercentage = parsed.clamp(0.0, 100.0);
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(child: _buildQuickDiscountButton(context, '5%', () => updateDiscount(5.0))),
+                      const SizedBox(width: 6),
+                      Expanded(child: _buildQuickDiscountButton(context, '10%', () => updateDiscount(10.0))),
+                      const SizedBox(width: 6),
+                      Expanded(child: _buildQuickDiscountButton(context, '15%', () => updateDiscount(15.0))),
+                      const SizedBox(width: 6),
+                      Expanded(child: _buildQuickDiscountButton(context, '20%', () => updateDiscount(20.0))),
+                      const SizedBox(width: 6),
+                      Expanded(child: _buildQuickDiscountButton(context, '0%', () => updateDiscount(0.0), isCancel: true)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'ملاحظات إضافية',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.note_alt),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  parentCtx.read<PosBloc>().add(
+                        CompleteSale(
+                          userId: SessionManager.instance.currentUserId,
+                          notes: notesController.text.isNotEmpty ? notesController.text : null,
+                          discountPercentage: discountPercentage,
+                        ),
+                      );
+                  Navigator.pop(dialogCtx);
+                },
+                child: const Text('تأكيد ودفع'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+Widget _buildQuickDiscountButton(BuildContext context, String label, VoidCallback onPressed, {bool isCancel = false}) {
+  final colorScheme = Theme.of(context).colorScheme;
+  return SizedBox(
+    height: 32,
+    child: OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        side: BorderSide(color: isCancel ? colorScheme.error : colorScheme.primary),
+        foregroundColor: isCancel ? colorScheme.error : colorScheme.primary,
+        shape: const StadiumBorder(),
+      ),
+      onPressed: onPressed,
+      child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+    ),
+  );
 }

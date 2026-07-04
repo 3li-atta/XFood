@@ -101,6 +101,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
     required double totalAmount,
     required String? notes,
     required List<SaleInput> items,
+    double discountPercentage = 0.0,
   }) {
     return _transactionDao.createSaleWithStockDeduction(
       userId: userId,
@@ -113,6 +114,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
                 priceAtTime: i.priceAtTime,
               ))
           .toList(),
+      discountPercentage: discountPercentage,
     );
   }
 
@@ -204,7 +206,13 @@ class TransactionRepositoryImpl implements TransactionRepository {
       totalPurchases += pi.totalAmount;
     }
 
-    final totalExpenses = await _expenseDao.getTotalExpensesForDateRange(start, end);
+    final expenseList = await _expenseDao.getExpensesForDateRange(start, end);
+    double totalExpenses = 0.0;
+    final Map<String, double> expensesByCategory = {};
+    for (final exp in expenseList) {
+      totalExpenses += exp.amount;
+      expensesByCategory[exp.category] = (expensesByCategory[exp.category] ?? 0.0) + exp.amount;
+    }
 
     final netProfit = totalRevenue - totalCOGS - totalWasteCost - totalExpenses;
 
@@ -215,6 +223,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
       totalPurchases: totalPurchases,
       totalExpenses: totalExpenses,
       netProfit: netProfit,
+      expensesByCategory: expensesByCategory,
     );
   }
 

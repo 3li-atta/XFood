@@ -8,6 +8,7 @@ class ProfitLossReportEntity extends Equatable {
   final double totalPurchases;
   final double totalExpenses; // المصروفات التشغيلية
   final double netProfit;
+  final Map<String, double> expensesByCategory; // تفاصيل المصروفات حسب الفئة
 
   const ProfitLossReportEntity({
     required this.totalRevenue,
@@ -16,6 +17,7 @@ class ProfitLossReportEntity extends Equatable {
     required this.totalPurchases,
     required this.totalExpenses,
     required this.netProfit,
+    required this.expensesByCategory,
   });
 
   @override
@@ -26,5 +28,6 @@ class ProfitLossReportEntity extends Equatable {
         totalPurchases,
         totalExpenses,
         netProfit,
+        expensesByCategory,
       ];
 }

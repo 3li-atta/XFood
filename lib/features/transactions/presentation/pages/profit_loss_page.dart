@@ -335,6 +335,91 @@ class _ProfitLossViewState extends State<_ProfitLossView> {
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 24),
+                            Card(
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(20.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.pie_chart_rounded, color: colorScheme.primary),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'تفاصيل المصروفات التشغيلية حسب الفئة',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const Divider(height: 24),
+                                    if (r.expensesByCategory.isEmpty)
+                                      const Center(
+                                        child: Padding(
+                                          padding: EdgeInsets.symmetric(vertical: 16.0),
+                                          child: Text(
+                                            'لا توجد مصروفات مسجلة في هذه الفترة.',
+                                            style: TextStyle(color: Colors.grey),
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      ...r.expensesByCategory.entries.map((entry) {
+                                        final categoryName = entry.key;
+                                        final amount = entry.value;
+                                        final percentage = r.totalExpenses > 0
+                                            ? (amount / r.totalExpenses) * 100
+                                            : 0.0;
+                                        return Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    categoryName,
+                                                    style: const TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 14,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    '${amount.toStringAsFixed(2)} ج.م (${percentage.toStringAsFixed(1)}%)',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: colorScheme.primary,
+                                                      fontSize: 14,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 6),
+                                              ClipRRect(
+                                                borderRadius: BorderRadius.circular(4),
+                                                child: LinearProgressIndicator(
+                                                  value: percentage / 100,
+                                                  backgroundColor: colorScheme.primary.withValues(alpha: 0.1),
+                                                  valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                                                  minHeight: 8,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       );

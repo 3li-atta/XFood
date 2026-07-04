@@ -98,6 +98,7 @@ class PosBloc extends Bloc<PosEvent, PosState> {
         totalAmount: state.totalAmount,
         notes: event.notes,
         items: saleItems,
+        discountPercentage: event.discountPercentage,
       ));
 
       emit(state.copyWith(
