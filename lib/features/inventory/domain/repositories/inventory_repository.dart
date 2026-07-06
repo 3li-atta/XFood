@@ -20,6 +20,7 @@ abstract class InventoryRepository {
     required String unitOfMeasurement,
     required double currentStock,
     required double costPrice,
+    required double minStockAlert,
   });
 
   /// Update stock level for an ingredient.
@@ -30,6 +31,7 @@ abstract class InventoryRepository {
     String? name,
     String? unitOfMeasurement,
     double? costPrice,
+    double? minStockAlert,
   });
 
   /// Delete an ingredient.

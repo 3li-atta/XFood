@@ -1,4 +1,6 @@
 import '../../../../core/usecases/usecase.dart';
+import '../../../../core/utils/session_manager.dart';
+import '../../../../core/error/exceptions.dart';
 import '../entities/treasury_transaction_entity.dart';
 import '../repositories/treasury_repository.dart';
 
@@ -9,6 +11,9 @@ class GetCurrentBalanceUseCase implements UseCase<double, NoParams> {
 
   @override
   Future<double> call(NoParams params) {
+    if (!SessionManager.instance.hasPermission('manage_treasury')) {
+      throw const UnauthorizedException('Permission denied: manage_treasury');
+    }
     return _repository.getCurrentBalance();
   }
 }
@@ -20,7 +25,31 @@ class GetAllTreasuryTransactionsUseCase implements UseCase<List<TreasuryTransact
 
   @override
   Future<List<TreasuryTransactionEntity>> call(NoParams params) {
+    if (!SessionManager.instance.hasPermission('manage_treasury')) {
+      throw const UnauthorizedException('Permission denied: manage_treasury');
+    }
     return _repository.getAllTransactions();
+  }
+}
+
+class TreasuryPaginationParams {
+  final int limit;
+  final int offset;
+
+  const TreasuryPaginationParams({required this.limit, required this.offset});
+}
+
+class GetTreasuryTransactionsPaginatedUseCase implements UseCase<List<TreasuryTransactionEntity>, TreasuryPaginationParams> {
+  final TreasuryRepository _repository;
+
+  GetTreasuryTransactionsPaginatedUseCase(this._repository);
+
+  @override
+  Future<List<TreasuryTransactionEntity>> call(TreasuryPaginationParams params) {
+    if (!SessionManager.instance.hasPermission('manage_treasury')) {
+      throw const UnauthorizedException('Permission denied: manage_treasury');
+    }
+    return _repository.getTransactionsPaginated(params.limit, params.offset);
   }
 }
 
@@ -47,6 +76,9 @@ class AddManualAdjustmentUseCase implements UseCase<int, ManualAdjustmentParams>
 
   @override
   Future<int> call(ManualAdjustmentParams params) {
+    if (!SessionManager.instance.hasPermission('manage_treasury')) {
+      throw const UnauthorizedException('Permission denied: manage_treasury');
+    }
     return _repository.addManualAdjustment(
       userId: params.userId,
       shiftId: params.shiftId,

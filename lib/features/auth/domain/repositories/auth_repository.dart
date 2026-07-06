@@ -28,4 +28,7 @@ abstract class AuthRepository {
 
   /// Change password and clear the force-change flag (V-12).
   Future<bool> changePasswordAndClearForceFlag(int userId, String newPassword);
+
+  /// Assign granular permissions to a user.
+  Future<void> assignPermissions(int userId, List<String> permissions);
 }

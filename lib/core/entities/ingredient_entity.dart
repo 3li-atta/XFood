@@ -7,6 +7,7 @@ class IngredientEntity extends Equatable {
   final String unitOfMeasurement;
   final double currentStock;
   final double costPrice;
+  final double minStockAlert;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -16,6 +17,7 @@ class IngredientEntity extends Equatable {
     required this.unitOfMeasurement,
     required this.currentStock,
     required this.costPrice,
+    required this.minStockAlert,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -23,8 +25,8 @@ class IngredientEntity extends Equatable {
   /// Total value of current stock.
   double get stockValue => currentStock * costPrice;
 
-  /// Whether stock is critically low (below 10 units).
-  bool get isLowStock => currentStock <= 10;
+  /// Whether stock is critically low (below the warning threshold).
+  bool get isLowStock => currentStock <= minStockAlert;
 
   @override
   List<Object?> get props => [
@@ -33,6 +35,7 @@ class IngredientEntity extends Equatable {
         unitOfMeasurement,
         currentStock,
         costPrice,
+        minStockAlert,
         createdAt,
         updatedAt,
       ];

@@ -8,7 +8,15 @@ abstract class TreasuryEvent extends Equatable {
 }
 
 class LoadTreasury extends TreasuryEvent {
-  const LoadTreasury();
+  final bool isRefresh;
+  const LoadTreasury({this.isRefresh = false});
+
+  @override
+  List<Object?> get props => [isRefresh];
+}
+
+class LoadMoreTreasury extends TreasuryEvent {
+  const LoadMoreTreasury();
 }
 
 class AddManualAdjustmentRequested extends TreasuryEvent {

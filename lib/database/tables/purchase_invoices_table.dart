@@ -3,6 +3,8 @@ import 'users_table.dart';
 import 'shifts_table.dart';
 
 /// PurchaseInvoices table — records procurement actions.
+@TableIndex(name: 'idx_purchase_invoices_status', columns: {#status})
+@TableIndex(name: 'idx_purchase_invoices_created_at', columns: {#createdAt})
 class PurchaseInvoices extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get invoiceNumber => text().unique()();

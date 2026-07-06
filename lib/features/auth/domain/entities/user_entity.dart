@@ -7,6 +7,7 @@ class UserEntity extends Equatable {
   final String recoveryEmail;
   final String role;
   final bool mustChangePassword;
+  final List<String> permissions;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -16,6 +17,7 @@ class UserEntity extends Equatable {
     required this.recoveryEmail,
     required this.role,
     required this.mustChangePassword,
+    required this.permissions,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -25,5 +27,5 @@ class UserEntity extends Equatable {
 
   @override
   List<Object?> get props =>
-      [id, username, recoveryEmail, role, mustChangePassword, createdAt, updatedAt];
+      [id, username, recoveryEmail, role, mustChangePassword, permissions, createdAt, updatedAt];
 }

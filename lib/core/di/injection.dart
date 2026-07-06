@@ -2,6 +2,19 @@ import 'package:get_it/get_it.dart';
 import 'package:xfood_pos/database/app_database.dart';
 import 'package:xfood_pos/features/backup/domain/services/backup_service.dart';
 import 'package:xfood_pos/features/backup/data/services/google_drive_backup_service.dart';
+import 'package:xfood_pos/core/services/device_config_service.dart';
+import 'package:xfood_pos/core/services/lan_server_service.dart';
+import 'package:xfood_pos/core/services/lan_sync/websocket_hub.dart';
+import 'package:xfood_pos/core/services/lan_sync/api_handlers.dart';
+import 'package:xfood_pos/core/services/lan_sync/api_router.dart';
+import 'package:xfood_pos/core/services/lan_sync/lan_client_service.dart';
+import 'package:xfood_pos/features/meals/data/repositories/remote_meal_repository.dart';
+import 'package:xfood_pos/features/transactions/data/repositories/remote_transaction_repository.dart';
+import 'package:xfood_pos/features/shifts/data/repositories/remote_shift_repository.dart';
+import 'package:xfood_pos/features/reports/domain/repositories/reports_repository.dart';
+import 'package:xfood_pos/features/reports/data/repositories/reports_repository_impl.dart';
+import 'package:xfood_pos/features/reports/domain/usecases/report_usecases.dart';
+import 'package:xfood_pos/features/reports/presentation/bloc/reports_bloc.dart';
 
 // Repositories
 import 'package:xfood_pos/features/auth/data/repositories/auth_repository_impl.dart';
@@ -43,6 +56,7 @@ import 'package:xfood_pos/features/procurement/presentation/bloc/purchase_bloc.d
 import 'package:xfood_pos/features/treasury/presentation/bloc/treasury_bloc.dart';
 import 'package:xfood_pos/features/shifts/presentation/bloc/shift_bloc.dart';
 import 'package:xfood_pos/features/backup/presentation/bloc/backup_bloc.dart';
+import 'package:xfood_pos/features/settings/presentation/bloc/device_settings_bloc.dart';
 
 final getIt = GetIt.instance;
 
@@ -55,6 +69,20 @@ Future<void> configureDependencies() async {
   final database = AppDatabase();
   getIt.registerSingleton<AppDatabase>(database);
 
+  // ── LAN Sync & Device Config ──────────────────────────────
+  final deviceConfig = DeviceConfigService();
+  await deviceConfig.init();
+  getIt.registerSingleton<DeviceConfigService>(deviceConfig);
+
+  final webSocketHub = WebSocketHub(deviceConfig);
+  getIt.registerSingleton<WebSocketHub>(webSocketHub);
+
+  final lanServer = LanServerService(webSocketHub);
+  getIt.registerSingleton<LanServerService>(lanServer);
+
+  final lanClient = LanClientService(deviceConfig);
+  getIt.registerSingleton<LanClientService>(lanClient);
+
   // ── DAOs ──────────────────────────────────────────────────
   getIt.registerLazySingleton(() => database.userDao);
   getIt.registerLazySingleton(() => database.ingredientDao);
@@ -65,6 +93,22 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton(() => database.purchaseDao);
   getIt.registerLazySingleton(() => database.treasuryDao);
   getIt.registerLazySingleton(() => database.expenseDao);
+  getIt.registerLazySingleton(() => database.auditLogDao);
+  getIt.registerLazySingleton(() => database.tableDao);
+  getIt.registerLazySingleton(() => database.pendingOrderDao);
+  getIt.registerLazySingleton(() => database.reportsDao);
+
+  // ── LAN Sync Handlers & Router ───────────────────────────
+  getIt.registerLazySingleton<ApiHandlers>(() => ApiHandlers(
+    mealDao: getIt(),
+    tableDao: getIt(),
+    pendingOrderDao: getIt(),
+    transactionDao: getIt(),
+    shiftDao: getIt(),
+    deviceConfig: getIt(),
+    webSocketHub: getIt(),
+  ));
+  getIt.registerLazySingleton<ApiRouter>(() => ApiRouter(getIt()));
 
   // ── Repositories ──────────────────────────────────────────
   getIt.registerLazySingleton<AuthRepository>(
@@ -73,26 +117,22 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<InventoryRepository>(
     () => InventoryRepositoryImpl(getIt()),
   );
-  getIt.registerLazySingleton<MealRepository>(
-    () => MealRepositoryImpl(getIt(), getIt()),
-  );
-  getIt.registerLazySingleton<TransactionRepository>(
-    () => TransactionRepositoryImpl(getIt(), getIt(), getIt()),
-  );
+  _registerRepos(deviceConfig.isMaster);
+
   getIt.registerLazySingleton<PurchaseRepository>(
     () => PurchaseRepositoryImpl(getIt(), getIt()),
   );
   getIt.registerLazySingleton<TreasuryRepository>(
     () => TreasuryRepositoryImpl(getIt()),
   );
-  getIt.registerLazySingleton<ShiftRepository>(
-    () => ShiftRepositoryImpl(getIt(), getIt()),
-  );
   getIt.registerLazySingleton<BackupService>(
     () => GoogleDriveBackupService(),
   );
   getIt.registerLazySingleton<ExpenseRepository>(
     () => ExpenseRepositoryImpl(getIt()),
+  );
+  getIt.registerLazySingleton<ReportsRepository>(
+    () => ReportsRepositoryImpl(getIt()),
   );
 
   // ── Use Cases ─────────────────────────────────────────────
@@ -109,6 +149,7 @@ Future<void> configureDependencies() async {
   
   getIt.registerLazySingleton(() => GetCurrentBalanceUseCase(getIt()));
   getIt.registerLazySingleton(() => GetAllTreasuryTransactionsUseCase(getIt()));
+  getIt.registerLazySingleton(() => GetTreasuryTransactionsPaginatedUseCase(getIt()));
   getIt.registerLazySingleton(() => AddManualAdjustmentUseCase(getIt()));
   
   getIt.registerLazySingleton(() => OpenShiftUseCase(getIt()));
@@ -117,6 +158,13 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton(() => GetShiftHistoryUseCase(getIt()));
   getIt.registerLazySingleton(() => RecordExpenseUseCase(getIt()));
   getIt.registerLazySingleton(() => GetExpensesUseCase(getIt()));
+
+  // Reports Use Cases
+  getIt.registerLazySingleton(() => GetProductMixUseCase(getIt()));
+  getIt.registerLazySingleton(() => GetExpenseBreakdownUseCase(getIt()));
+  getIt.registerLazySingleton(() => GetInventoryConsumptionUseCase(getIt()));
+  getIt.registerLazySingleton(() => GetPeakHoursUseCase(getIt()));
+  getIt.registerLazySingleton(() => GetCashierPerformanceUseCase(getIt()));
 
   // ── Blocs ─────────────────────────────────────────────────
   getIt.registerFactory(() => AuthBloc(
@@ -143,7 +191,7 @@ Future<void> configureDependencies() async {
       ));
   getIt.registerFactory(() => TreasuryBloc(
         getCurrentBalanceUseCase: getIt(),
-        getAllTreasuryTransactionsUseCase: getIt(),
+        getTreasuryTransactionsPaginatedUseCase: getIt(),
         addManualAdjustmentUseCase: getIt(),
       ));
   getIt.registerFactory(() => ShiftBloc(
@@ -157,4 +205,61 @@ Future<void> configureDependencies() async {
         recordExpenseUseCase: getIt(),
         getExpensesUseCase: getIt(),
       ));
+  getIt.registerFactory(() => DeviceSettingsBloc(
+        config: getIt(),
+        server: getIt(),
+        client: getIt(),
+        apiRouter: getIt(),
+        webSocketHub: getIt(),
+      ));
+  getIt.registerFactory(() => ReportsBloc(
+        getProductMixUseCase: getIt(),
+        getExpenseBreakdownUseCase: getIt(),
+        getInventoryConsumptionUseCase: getIt(),
+        getPeakHoursUseCase: getIt(),
+        getCashierPerformanceUseCase: getIt(),
+        getExpensesUseCase: getIt(),
+        getProfitLossUseCase: getIt(),
+      ));
+}
+
+void _registerRepos(bool isMaster) {
+  if (isMaster) {
+    getIt.registerLazySingleton<MealRepository>(
+      () => MealRepositoryImpl(getIt(), getIt()),
+    );
+    getIt.registerLazySingleton<TransactionRepository>(
+      () => TransactionRepositoryImpl(getIt(), getIt(), getIt()),
+    );
+    getIt.registerLazySingleton<ShiftRepository>(
+      () => ShiftRepositoryImpl(getIt(), getIt()),
+    );
+  } else {
+    getIt.registerLazySingleton<MealRepository>(
+      () => RemoteMealRepository(getIt()),
+    );
+    getIt.registerLazySingleton<TransactionRepository>(
+      () => RemoteTransactionRepository(getIt()),
+    );
+    getIt.registerLazySingleton<ShiftRepository>(
+      () => RemoteShiftRepository(getIt()),
+    );
+  }
+}
+
+void rebindRepositories() {
+  final deviceConfig = getIt<DeviceConfigService>();
+  final isMaster = deviceConfig.isMaster;
+
+  if (getIt.isRegistered<MealRepository>()) {
+    getIt.unregister<MealRepository>();
+  }
+  if (getIt.isRegistered<TransactionRepository>()) {
+    getIt.unregister<TransactionRepository>();
+  }
+  if (getIt.isRegistered<ShiftRepository>()) {
+    getIt.unregister<ShiftRepository>();
+  }
+
+  _registerRepos(isMaster);
 }

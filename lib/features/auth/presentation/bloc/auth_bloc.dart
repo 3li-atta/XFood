@@ -51,8 +51,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(const AuthLoading());
     try {
       SessionManager.instance.clear();
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
       emit(const AuthUnauthenticated());
     } catch (e) {
       emit(AuthError(e.toString()));

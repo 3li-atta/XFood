@@ -16,16 +16,18 @@ class AddIngredientRequested extends InventoryEvent {
   final String unitOfMeasurement;
   final double currentStock;
   final double costPrice;
+  final double minStockAlert;
 
   const AddIngredientRequested({
     required this.name,
     required this.unitOfMeasurement,
     required this.currentStock,
     required this.costPrice,
+    required this.minStockAlert,
   });
 
   @override
-  List<Object?> get props => [name, unitOfMeasurement, currentStock, costPrice];
+  List<Object?> get props => [name, unitOfMeasurement, currentStock, costPrice, minStockAlert];
 }
 
 class UpdateIngredientRequested extends InventoryEvent {
@@ -33,16 +35,18 @@ class UpdateIngredientRequested extends InventoryEvent {
   final String name;
   final String unitOfMeasurement;
   final double costPrice;
+  final double minStockAlert;
 
   const UpdateIngredientRequested({
     required this.id,
     required this.name,
     required this.unitOfMeasurement,
     required this.costPrice,
+    required this.minStockAlert,
   });
 
   @override
-  List<Object?> get props => [id, name, unitOfMeasurement, costPrice];
+  List<Object?> get props => [id, name, unitOfMeasurement, costPrice, minStockAlert];
 }
 
 class UpdateStockRequested extends InventoryEvent {

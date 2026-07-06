@@ -18,11 +18,32 @@ class TreasuryLoading extends TreasuryState {
 class TreasuryLoaded extends TreasuryState {
   final List<TreasuryTransactionEntity> transactions;
   final double balance;
+  final bool hasMore;
+  final bool isLoadingMore;
 
-  const TreasuryLoaded({required this.transactions, required this.balance});
+  const TreasuryLoaded({
+    required this.transactions,
+    required this.balance,
+    this.hasMore = true,
+    this.isLoadingMore = false,
+  });
+
+  TreasuryLoaded copyWith({
+    List<TreasuryTransactionEntity>? transactions,
+    double? balance,
+    bool? hasMore,
+    bool? isLoadingMore,
+  }) {
+    return TreasuryLoaded(
+      transactions: transactions ?? this.transactions,
+      balance: balance ?? this.balance,
+      hasMore: hasMore ?? this.hasMore,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+    );
+  }
 
   @override
-  List<Object?> get props => [transactions, balance];
+  List<Object?> get props => [transactions, balance, hasMore, isLoadingMore];
 }
 
 class TreasurySuccess extends TreasuryState {

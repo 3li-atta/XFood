@@ -1,4 +1,6 @@
 import '../../../../core/usecases/usecase.dart';
+import '../../../../core/utils/session_manager.dart';
+import '../../../../core/error/exceptions.dart';
 import '../entities/purchase_invoice_entity.dart';
 import '../repositories/purchase_repository.dart';
 
@@ -25,6 +27,9 @@ class CreatePurchaseInvoiceUseCase implements UseCase<int, CreatePurchaseParams>
 
   @override
   Future<int> call(CreatePurchaseParams params) {
+    if (!SessionManager.instance.hasPermission('manage_purchases')) {
+      throw const UnauthorizedException('Permission denied: manage_purchases');
+    }
     return _repository.createPurchaseInvoice(
       userId: params.userId,
       shiftId: params.shiftId,
@@ -42,17 +47,30 @@ class GetAllPurchaseInvoicesUseCase implements UseCase<List<PurchaseInvoiceEntit
 
   @override
   Future<List<PurchaseInvoiceEntity>> call(NoParams params) {
+    if (!SessionManager.instance.hasPermission('manage_purchases')) {
+      throw const UnauthorizedException('Permission denied: manage_purchases');
+    }
     return _repository.getAllInvoices();
   }
 }
 
-class VoidPurchaseInvoiceUseCase implements UseCase<bool, int> {
+class VoidPurchaseParams {
+  final int invoiceId;
+  final String reason;
+
+  const VoidPurchaseParams({required this.invoiceId, required this.reason});
+}
+
+class VoidPurchaseInvoiceUseCase implements UseCase<bool, VoidPurchaseParams> {
   final PurchaseRepository _repository;
 
   VoidPurchaseInvoiceUseCase(this._repository);
 
   @override
-  Future<bool> call(int invoiceId) {
-    return _repository.voidPurchaseInvoice(invoiceId);
+  Future<bool> call(VoidPurchaseParams params) {
+    if (!SessionManager.instance.hasPermission('manage_purchases')) {
+      throw const UnauthorizedException('Permission denied: manage_purchases');
+    }
+    return _repository.voidPurchaseInvoice(params.invoiceId, params.reason);
   }
 }

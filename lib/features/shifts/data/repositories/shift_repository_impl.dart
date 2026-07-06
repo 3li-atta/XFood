@@ -13,8 +13,23 @@ class ShiftRepositoryImpl implements ShiftRepository {
   @override
   Future<ShiftEntity?> getActiveShift(int cashierId) async {
     final row = await _shiftDao.getActiveShift(cashierId);
-    if (row == null) return null;
-    return _mapToEntity(row);
+    if (row != null) {
+      return _mapToEntity(row);
+    }
+
+    // If no active shift is found for this cashierId, check if they are an admin
+    try {
+      final users = await _userDao.getAllUsers();
+      final user = users.firstWhere((u) => u.id == cashierId);
+      if (user.role == 'admin') {
+        final anyOpenShift = await _shiftDao.getAnyActiveShift();
+        if (anyOpenShift != null) {
+          return _mapToEntity(anyOpenShift);
+        }
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   @override

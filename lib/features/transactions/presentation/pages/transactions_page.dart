@@ -20,22 +20,72 @@ class TransactionsPage extends StatefulWidget {
 }
 
 class _TransactionsPageState extends State<TransactionsPage> {
-  late Future<List<TransactionEntity>> _txnFuture;
   final _repo = getIt<TransactionRepository>();
   String _filterType = 'all';
+
+  final List<TransactionEntity> _transactions = [];
+  int _currentOffset = 0;
+  static const int _pageSize = 20;
+  bool _hasMore = true;
+  bool _isLoading = false;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _loadTransactions();
+    _scrollController.addListener(_scrollListener);
+    _loadTransactions(isRefresh: true);
   }
 
-  void _loadTransactions() {
+  @override
+  void dispose() {
+    _scrollController.removeListener(_scrollListener);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      _loadTransactions();
+    }
+  }
+
+  Future<void> _loadTransactions({bool isRefresh = false}) async {
+    if (_isLoading) return;
+    if (!isRefresh && !_hasMore) return;
+
     setState(() {
-      _txnFuture = _filterType == 'all'
-          ? _repo.getAllTransactions()
-          : _repo.getTransactionsByType(_filterType);
+      _isLoading = true;
+      if (isRefresh) {
+        _transactions.clear();
+        _currentOffset = 0;
+        _hasMore = true;
+      }
     });
+
+    try {
+      final newItems = _filterType == 'all'
+          ? await _repo.getAllTransactions(limit: _pageSize, offset: _currentOffset)
+          : await _repo.getTransactionsByType(_filterType, limit: _pageSize, offset: _currentOffset);
+
+      setState(() {
+        _transactions.addAll(newItems);
+        _currentOffset += newItems.length;
+        _isLoading = false;
+        if (newItems.length < _pageSize) {
+          _hasMore = false;
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في تحميل المعاملات: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
@@ -76,119 +126,108 @@ class _TransactionsPageState extends State<TransactionsPage> {
           ),
 
           // Total Summary Card
-          FutureBuilder<List<TransactionEntity>>(
-            future: _txnFuture,
-            builder: (context, snapshot) {
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return const SizedBox.shrink();
-              }
-              final total = snapshot.data!
-                  .fold<double>(0, (s, t) => s + t.totalAmount);
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: colorScheme.primaryContainer.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.summarize, size: 20, color: colorScheme.primary),
-                        const SizedBox(width: 8),
-                        Text(
-                          'إجمالي المبلغ للمعاملات المفلترة:',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.onSurface,
-                          ),
+          if (_transactions.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: colorScheme.primaryContainer.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.summarize, size: 20, color: colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'إجمالي المبلغ للمعاملات المفلترة:',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
                         ),
-                      ],
-                    ),
-                    Text(
-                      '${total.toStringAsFixed(2)} ج.م',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.primary,
                       ),
+                    ],
+                  ),
+                  Text(
+                    '${_transactions.fold<double>(0, (s, t) => s + t.totalAmount).toStringAsFixed(2)} ج.م',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
                     ),
-                  ],
-                ),
-              );
-            },
-          ),
+                  ),
+                ],
+              ),
+            ),
 
           // Transaction list
           Expanded(
-            child: FutureBuilder<List<TransactionEntity>>(
-              future: _txnFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('لا توجد معاملات بعد.'));
-                }
+            child: _transactions.isEmpty && !_isLoading
+                ? const Center(child: Text('لا توجد معاملات بعد.'))
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _transactions.length + (_hasMore ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index == _transactions.length) {
+                        return const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: snapshot.data!.length,
-                  itemBuilder: (context, index) {
-                    final txn = snapshot.data![index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        leading: CircleAvatar(
-                          backgroundColor:
-                              _getTypeColor(txn.type).withValues(alpha: 0.15),
-                          child: Icon(_getTypeIcon(txn.type),
-                              color: _getTypeColor(txn.type)),
-                        ),
-                        title: Row(
-                          children: [
-                            Text(
-                              _getTypeLabel(txn.type),
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '#${txn.id}',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: colorScheme.onSurfaceVariant),
-                            ),
-                          ],
-                        ),
-                        subtitle: Text(dateFormat.format(txn.createdAt)),
-                        trailing: Text(
-                          '${txn.totalAmount.toStringAsFixed(2)} ج.م',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: txn.isSale
-                                ? Colors.green
-                                : txn.isWaste || txn.type == 'expense' || txn.type == 'purchase'
-                                    ? Colors.red
-                                    : colorScheme.primary,
+                      final txn = _transactions[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          leading: CircleAvatar(
+                            backgroundColor:
+                                _getTypeColor(txn.type).withValues(alpha: 0.15),
+                            child: Icon(_getTypeIcon(txn.type),
+                                color: _getTypeColor(txn.type)),
                           ),
+                          title: Row(
+                            children: [
+                              Text(
+                                _getTypeLabel(txn.type),
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '#${txn.id}',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: colorScheme.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                          subtitle: Text(dateFormat.format(txn.createdAt)),
+                          trailing: Text(
+                            '${txn.totalAmount.toStringAsFixed(2)} ج.م',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: txn.isSale
+                                  ? Colors.green
+                                  : txn.isWaste || txn.type == 'expense' || txn.type == 'purchase'
+                                      ? Colors.red
+                                      : colorScheme.primary,
+                            ),
+                          ),
+                          onTap: () => _showTransactionDetails(context, txn),
                         ),
-                        onTap: () => _showTransactionDetails(context, txn),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -201,8 +240,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
       label: Text(label),
       selected: isSelected,
       onSelected: (_) {
-        _filterType = type;
-        _loadTransactions();
+        setState(() {
+          _filterType = type;
+        });
+        _loadTransactions(isRefresh: true);
       },
       showCheckmark: false,
       selectedColor: const Color(0xFF1E3A8A),
@@ -301,32 +342,72 @@ class _TransactionsPageState extends State<TransactionsPage> {
             TextButton(
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               onPressed: () async {
-                Navigator.pop(ctx);
-                final confirm = await showDialog<bool>(
+                final refundReason = await showDialog<String>(
                   context: context,
-                  builder: (confirmCtx) => AlertDialog(
-                    title: const Text('عمل مرتجع للطلب؟'),
-                    content: const Text(
-                        'هل أنت متأكد من رغبتك في عمل مرتجع لهذا الطلب بالكامل؟ سيتم إرجاع المكونات إلى المخزن وخصم المبلغ من درج الكاشير والخزينة.'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(confirmCtx, false),
-                        child: const Text('إلغاء'),
-                      ),
-                      FilledButton(
-                        style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                        onPressed: () => Navigator.pop(confirmCtx, true),
-                        child: const Text('نعم، مرتجع'),
-                      ),
-                    ],
-                  ),
+                  builder: (confirmCtx) {
+                    final reasonController = TextEditingController();
+                    final formKey = GlobalKey<FormState>();
+
+                    return StatefulBuilder(
+                      builder: (context, setState) {
+                        return AlertDialog(
+                          title: const Text('عمل مرتجع للطلب؟'),
+                          content: Form(
+                            key: formKey,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                    'هل أنت متأكد من رغبتك في عمل مرتجع لهذا الطلب بالكامل؟ سيتم إرجاع المكونات إلى المخزن وخصم المبلغ من درج الكاشير والخزينة.'),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: reasonController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'سبب الإرجاع (Refund Reason) *',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  validator: (val) {
+                                    if (val == null || val.trim().isEmpty) {
+                                      return 'الرجاء إدخال سبب الإرجاع';
+                                    }
+                                    return null;
+                                  },
+                                  onChanged: (val) {
+                                    setState(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(confirmCtx, ''),
+                              child: const Text('إلغاء'),
+                            ),
+                            FilledButton(
+                              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                              onPressed: reasonController.text.trim().isNotEmpty
+                                  ? () {
+                                      if (formKey.currentState!.validate()) {
+                                        Navigator.pop(confirmCtx, reasonController.text.trim());
+                                      }
+                                    }
+                                  : null,
+                              child: const Text('نعم، مرتجع'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
                 );
 
-                if (confirm == true && context.mounted) {
+                if (refundReason != null && refundReason.isNotEmpty && context.mounted) {
                   try {
                     final userId = SessionManager.instance.currentUserId;
-                    await _repo.refundSaleTransaction(txn.id, userId);
+                    await _repo.refundSaleTransaction(txn.id, userId, refundReason);
                     if (context.mounted) {
+                      Navigator.pop(ctx); // Close details dialog after successful refund
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('✓ تم إرجاع الطلب بنجاح!'),

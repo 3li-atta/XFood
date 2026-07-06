@@ -32,9 +32,10 @@ class CreatePurchaseInvoiceRequested extends PurchaseEvent {
 
 class VoidPurchaseInvoiceRequested extends PurchaseEvent {
   final int invoiceId;
+  final String reason;
 
-  const VoidPurchaseInvoiceRequested(this.invoiceId);
+  const VoidPurchaseInvoiceRequested({required this.invoiceId, required this.reason});
 
   @override
-  List<Object?> get props => [invoiceId];
+  List<Object?> get props => [invoiceId, reason];
 }

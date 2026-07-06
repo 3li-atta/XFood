@@ -55,7 +55,10 @@ class PurchaseBloc extends Bloc<PurchaseEvent, PurchaseState> {
   Future<void> _onVoidPurchase(VoidPurchaseInvoiceRequested event, Emitter<PurchaseState> emit) async {
     emit(const PurchaseLoading());
     try {
-      await _voidPurchaseInvoiceUseCase(event.invoiceId);
+      await _voidPurchaseInvoiceUseCase(VoidPurchaseParams(
+        invoiceId: event.invoiceId,
+        reason: event.reason,
+      ));
       emit(const PurchaseSuccess());
     } catch (e) {
       emit(PurchaseError(e.toString()));

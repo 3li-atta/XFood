@@ -4,6 +4,7 @@ import '../../domain/repositories/transaction_repository.dart';
 import '../../domain/usecases/create_sale_usecase.dart';
 import '../../../meals/domain/entities/meal_entity.dart';
 import '../../../shifts/domain/repositories/shift_repository.dart';
+import '../../../../database/app_database.dart';
 
 part 'pos_event.dart';
 part 'pos_state.dart';
@@ -26,6 +27,10 @@ class PosBloc extends Bloc<PosEvent, PosState> {
     on<UpdateCartItemQuantity>(_onUpdateQuantity);
     on<ClearCart>(_onClearCart);
     on<CompleteSale>(_onCompleteSale);
+    on<ChangeOrderType>(_onChangeOrderType);
+    on<SelectTable>(_onSelectTable);
+    on<ChangePaymentMethod>(_onChangePaymentMethod);
+    on<ResetPosStatus>(_onResetPosStatus);
   }
 
   void _onAddToCart(AddToCart event, Emitter<PosState> emit) {
@@ -40,13 +45,13 @@ class PosBloc extends Bloc<PosEvent, PosState> {
       items.add(CartItem(meal: event.meal, quantity: 1));
     }
 
-    emit(state.copyWith(cartItems: items));
+    emit(state.copyWith(cartItems: items, status: PosStatus.idle));
   }
 
   void _onRemoveFromCart(RemoveFromCart event, Emitter<PosState> emit) {
     final items = List<CartItem>.from(state.cartItems)
       ..removeWhere((i) => i.meal.id == event.mealId);
-    emit(state.copyWith(cartItems: items));
+    emit(state.copyWith(cartItems: items, status: PosStatus.idle));
   }
 
   void _onUpdateQuantity(
@@ -60,11 +65,33 @@ class PosBloc extends Bloc<PosEvent, PosState> {
         items[index] = items[index].copyWith(quantity: event.newQuantity);
       }
     }
-    emit(state.copyWith(cartItems: items));
+    emit(state.copyWith(cartItems: items, status: PosStatus.idle));
+  }
+
+  void _onChangeOrderType(ChangeOrderType event, Emitter<PosState> emit) {
+    if (event.orderType != 'dine_in') {
+      emit(state.copyWith(orderType: event.orderType, clearTable: true, status: PosStatus.idle));
+    } else {
+      emit(state.copyWith(orderType: event.orderType, status: PosStatus.idle));
+    }
+  }
+
+  void _onSelectTable(SelectTable event, Emitter<PosState> emit) {
+    emit(state.copyWith(tableId: event.tableId, status: PosStatus.idle));
+  }
+
+  void _onChangePaymentMethod(ChangePaymentMethod event, Emitter<PosState> emit) {
+    emit(state.copyWith(paymentMethod: event.paymentMethod, status: PosStatus.idle));
   }
 
   void _onClearCart(ClearCart event, Emitter<PosState> emit) {
-    emit(state.copyWith(cartItems: [], status: PosStatus.idle));
+    emit(state.copyWith(
+      cartItems: [],
+      status: PosStatus.idle,
+      orderType: 'takeaway',
+      paymentMethod: 'cash',
+      clearTable: true,
+    ));
   }
 
   Future<void> _onCompleteSale(
@@ -92,18 +119,57 @@ class PosBloc extends Bloc<PosEvent, PosState> {
               ))
           .toList();
 
-      await _createSaleUseCase(CreateSaleParams(
+      final txnId = await _createSaleUseCase(CreateSaleParams(
         userId: event.userId,
         shiftId: activeShift.id,
         totalAmount: state.totalAmount,
         notes: event.notes,
         items: saleItems,
         discountPercentage: event.discountPercentage,
+        taxPercentage: event.taxPercentage,
+        orderType: event.orderType,
+        paymentMethod: event.paymentMethod,
+        tableId: event.tableId,
       ));
+
+      final subtotal = state.totalAmount;
+      final discountAmount = subtotal * (event.discountPercentage / 100);
+      final taxableAmount = subtotal - discountAmount;
+      final taxAmount = taxableAmount * (event.taxPercentage / 100);
+      final total = taxableAmount + taxAmount;
+
+      final completedTxn = Transaction(
+        id: txnId,
+        userId: event.userId,
+        shiftId: activeShift.id,
+        type: 'sale',
+        totalAmount: total,
+        subtotalAmount: subtotal,
+        discountAmount: discountAmount,
+        taxAmount: taxAmount,
+        createdAt: DateTime.now(),
+        orderType: event.orderType,
+        paymentMethod: event.paymentMethod,
+        tableId: event.tableId,
+        notes: event.notes,
+      );
+
+      final completedItems = state.cartItems
+          .map((c) => {
+                'meal_name': c.meal.name,
+                'quantity': c.quantity,
+                'meal_price': c.meal.sellingPrice,
+              })
+          .toList();
 
       emit(state.copyWith(
         cartItems: [],
         status: PosStatus.success,
+        orderType: 'takeaway',
+        paymentMethod: 'cash',
+        clearTable: true,
+        completedTransaction: completedTxn,
+        completedTransactionItems: completedItems,
       ));
     } catch (e) {
       emit(state.copyWith(
@@ -111,5 +177,9 @@ class PosBloc extends Bloc<PosEvent, PosState> {
         errorMessage: e.toString(),
       ));
     }
+  }
+
+  void _onResetPosStatus(ResetPosStatus event, Emitter<PosState> emit) {
+    emit(state.copyWith(status: PosStatus.idle));
   }
 }

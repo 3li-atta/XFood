@@ -50,9 +50,49 @@ class CompleteSale extends PosEvent {
   final int userId;
   final String? notes;
   final double discountPercentage;
+  final double taxPercentage;
+  final String orderType;
+  final String paymentMethod;
+  final int? tableId;
 
-  const CompleteSale({required this.userId, this.notes, this.discountPercentage = 0.0});
+  const CompleteSale({
+    required this.userId,
+    this.notes,
+    this.discountPercentage = 0.0,
+    this.taxPercentage = 0.0,
+    this.orderType = 'takeaway',
+    this.paymentMethod = 'cash',
+    this.tableId,
+  });
 
   @override
-  List<Object?> get props => [userId, notes, discountPercentage];
+  List<Object?> get props => [userId, notes, discountPercentage, taxPercentage, orderType, paymentMethod, tableId];
+}
+
+class ChangeOrderType extends PosEvent {
+  final String orderType;
+  const ChangeOrderType(this.orderType);
+
+  @override
+  List<Object?> get props => [orderType];
+}
+
+class SelectTable extends PosEvent {
+  final int? tableId;
+  const SelectTable(this.tableId);
+
+  @override
+  List<Object?> get props => [tableId];
+}
+
+class ChangePaymentMethod extends PosEvent {
+  final String paymentMethod;
+  const ChangePaymentMethod(this.paymentMethod);
+
+  @override
+  List<Object?> get props => [paymentMethod];
+}
+
+class ResetPosStatus extends PosEvent {
+  const ResetPosStatus();
 }

@@ -29,3 +29,10 @@
 # Ignore Google Play Core deferred components missing warnings
 -dontwarn com.google.android.play.core.**
 
+# Google ML Kit & Play Services (used by mobile_scanner)
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.** { *; }
+-keep class dev.steenbakker.mobile_scanner.** { *; }
+-dontwarn com.google.mlkit.**
+-dontwarn com.google.android.gms.**
+-dontwarn dev.steenbakker.mobile_scanner.**

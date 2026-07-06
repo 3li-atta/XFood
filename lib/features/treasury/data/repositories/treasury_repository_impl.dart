@@ -20,6 +20,12 @@ class TreasuryRepositoryImpl implements TreasuryRepository {
   }
 
   @override
+  Future<List<TreasuryTransactionEntity>> getTransactionsPaginated(int limit, int offset) async {
+    final rows = await _treasuryDao.getTransactionsPaginated(limit, offset);
+    return rows.map(_mapToEntity).toList();
+  }
+
+  @override
   Future<List<TreasuryTransactionEntity>> getTransactionsForShift(int shiftId) async {
     final rows = await _treasuryDao.getTransactionsForShift(shiftId);
     return rows.map(_mapToEntity).toList();

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:restart_app/restart_app.dart';
 import 'dart:io' as io;
 import '../bloc/backup_bloc.dart';
@@ -309,11 +309,13 @@ class _BackupViewState extends State<_BackupView> {
               Text(
                 'الاتصال بـ Google Drive',
                 style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                textDirection: TextDirection.rtl,
               ),
               const SizedBox(height: 8),
               const Text(
                 'اربط حساب Google Drive الخاص بك لنسخ المبيعات، والوجبات، والمخزون، وبيانات السجل بأمان خارج الإنترنت. واستعادتها في أي وقت على جهاز آخر.',
                 textAlign: TextAlign.center,
+                textDirection: TextDirection.rtl,
                 style: TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 24),
@@ -355,6 +357,7 @@ class _BackupViewState extends State<_BackupView> {
                       const Text(
                         'تم الاتصال بـ Google Drive',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        textDirection: TextDirection.rtl,
                       ),
                       const SizedBox(height: 4),
                       Text(

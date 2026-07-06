@@ -16,31 +16,22 @@ class TransactionRepositoryImpl implements TransactionRepository {
   TransactionRepositoryImpl(this._transactionDao, this._purchaseDao, this._expenseDao);
 
   @override
-  Future<List<TransactionEntity>> getAllTransactions() async {
-    final rows = await _transactionDao.getAllTransactions();
-    final pRows = await _purchaseDao.getAllInvoices();
-    final eRows = await _expenseDao.getAllExpenses();
-
-    final salesAndWaste = rows.map(_mapTxnToEntity).toList();
-    final purchases = pRows.map(_mapPurchaseToEntity).toList();
-    final expenses = eRows.map(_mapExpenseToEntity).toList();
-
-    final combined = [...salesAndWaste, ...purchases, ...expenses];
-    combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return combined;
+  Future<List<TransactionEntity>> getAllTransactions({int limit = 50, int offset = 0}) async {
+    final rows = await _transactionDao.getCombinedTransactionsPaginated(limit, offset);
+    return rows.map(_mapTxnToEntity).toList();
   }
 
   @override
-  Future<List<TransactionEntity>> getTransactionsByType(String type) async {
+  Future<List<TransactionEntity>> getTransactionsByType(String type, {int limit = 50, int offset = 0}) async {
     if (type == 'purchase') {
-      final pRows = await _purchaseDao.getAllInvoices();
+      final pRows = await _purchaseDao.getAllInvoicesPaginated(limit, offset);
       return pRows.map(_mapPurchaseToEntity).toList();
     }
     if (type == 'expense') {
-      final eRows = await _expenseDao.getAllExpenses();
+      final eRows = await _expenseDao.getAllExpensesPaginated(limit, offset);
       return eRows.map(_mapExpenseToEntity).toList();
     }
-    final rows = await _transactionDao.getTransactionsByType(type);
+    final rows = await _transactionDao.getTransactionsByTypePaginated(type, limit, offset);
     return rows.map(_mapTxnToEntity).toList();
   }
 
@@ -99,9 +90,13 @@ class TransactionRepositoryImpl implements TransactionRepository {
     required int userId,
     required int? shiftId,
     required double totalAmount,
-    required String? notes,
+    required double discountPercentage,
+    required double taxPercentage,
     required List<SaleInput> items,
-    double discountPercentage = 0.0,
+    String? notes,
+    String orderType = 'takeaway',
+    String paymentMethod = 'cash',
+    int? tableId,
   }) {
     return _transactionDao.createSaleWithStockDeduction(
       userId: userId,
@@ -115,6 +110,10 @@ class TransactionRepositoryImpl implements TransactionRepository {
               ))
           .toList(),
       discountPercentage: discountPercentage,
+      taxPercentage: taxPercentage,
+      orderType: orderType,
+      paymentMethod: paymentMethod,
+      tableId: tableId,
     );
   }
 
@@ -228,10 +227,11 @@ class TransactionRepositoryImpl implements TransactionRepository {
   }
 
   @override
-  Future<bool> refundSaleTransaction(int transactionId, int userId) {
+  Future<bool> refundSaleTransaction(int transactionId, int userId, String reason) {
     return _transactionDao.refundSaleTransaction(
       transactionId: transactionId,
       userId: userId,
+      reason: reason,
     );
   }
 

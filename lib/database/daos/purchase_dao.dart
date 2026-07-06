@@ -35,8 +35,9 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       }
 
       final dateStr = DateTime.now().toIso8601String().substring(0, 10).replaceAll('-', '');
-      final count = await (select(purchaseInvoices)).get();
-      final sequence = count.length + 1;
+      final countQuery = selectOnly(purchaseInvoices)..addColumns([purchaseInvoices.id.count()]);
+      final count = await countQuery.map((row) => row.read(purchaseInvoices.id.count())).getSingleOrNull() ?? 0;
+      final sequence = count + 1;
       final invoiceNumber = 'PUR-$dateStr-${sequence.toString().padLeft(4, '0')}';
 
       // 2. Insert Invoice Header
@@ -120,6 +121,15 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         );
       }
 
+      // Audit Log logging
+      await db.into(db.auditLogs).insert(
+        AuditLogsCompanion.insert(
+          userId: userId,
+          action: 'create_purchase',
+          details: Value('{"invoiceId": $invoiceId, "invoiceNumber": "$invoiceNumber", "supplierName": "$supplierName", "totalAmount": $totalAmount}'),
+        ),
+      );
+
       return invoiceId;
     });
   }
@@ -131,6 +141,14 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         .get();
   }
 
+  /// Get all purchase invoices paginated.
+  Future<List<PurchaseInvoice>> getAllInvoicesPaginated(int limit, int offset) {
+    return (select(purchaseInvoices)
+          ..orderBy([(pi) => OrderingTerm.desc(pi.createdAt)])
+          ..limit(limit, offset: offset))
+        .get();
+  }
+
   /// Get line items for a purchase invoice.
   Future<List<PurchaseItem>> getItemsForInvoice(int invoiceId) {
     return (select(purchaseItems)
@@ -139,7 +157,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   }
 
   /// Void purchase invoice (reverses inventory and treasury).
-  Future<bool> voidPurchaseInvoice(int invoiceId) {
+  Future<bool> voidPurchaseInvoice({
+    required int invoiceId,
+    required String reason,
+  }) {
     return transaction(() async {
       final invoice = await (select(purchaseInvoices)..where((pi) => pi.id.equals(invoiceId))).getSingle();
       if (invoice.status == 'voided') {
@@ -150,6 +171,7 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       await (update(purchaseInvoices)..where((pi) => pi.id.equals(invoiceId))).write(
         PurchaseInvoicesCompanion(
           status: const Value('voided'),
+          notes: Value('[Void Reason: $reason] ${invoice.notes ?? ""}'),
           updatedAt: Value(DateTime.now()),
         ),
       );
@@ -200,6 +222,15 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           ),
         );
       }
+
+      // Audit Log logging
+      await db.into(db.auditLogs).insert(
+        AuditLogsCompanion.insert(
+          userId: invoice.userId,
+          action: 'void_purchase',
+          details: Value('{"invoiceId": $invoiceId, "invoiceNumber": "${invoice.invoiceNumber}", "totalAmount": ${invoice.totalAmount}, "reason": "$reason"}'),
+        ),
+      );
 
       return true;
     });

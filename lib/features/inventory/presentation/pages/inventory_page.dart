@@ -261,7 +261,7 @@ class _InventoryViewState extends State<_InventoryView> {
                                   ),
                                 ],
                                 rows: filtered.map((ing) {
-                                  final isLow = ing.currentStock < 10;
+                                  final isLow = ing.isLowStock;
                                   return DataRow(
                                     cells: [
                                       // اسم الصنف مع مؤشر مخزون منخفض
@@ -395,6 +395,8 @@ class _InventoryViewState extends State<_InventoryView> {
         text: ingredient?.currentStock.toString() ?? '0');
     final costCtrl = TextEditingController(
         text: ingredient?.costPrice.toString() ?? '');
+    final minStockCtrl = TextEditingController(
+        text: ingredient?.minStockAlert.toString() ?? '10.0');
     final bloc = context.read<InventoryBloc>();
 
     showDialog(
@@ -429,6 +431,15 @@ class _InventoryViewState extends State<_InventoryView> {
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(labelText: 'سعر تكلفة الوحدة (ج.م)'),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: minStockCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'حد تنبيه نقص المخزون (الحد الأدنى)',
+                  suffixText: 'وحدة',
+                ),
+              ),
             ],
           ),
         ),
@@ -441,12 +452,14 @@ class _InventoryViewState extends State<_InventoryView> {
             onPressed: () {
               final doubleStock = double.tryParse(stockCtrl.text) ?? 0.0;
               final doubleCost = double.tryParse(costCtrl.text) ?? 0.0;
+              final doubleMinStock = double.tryParse(minStockCtrl.text) ?? 10.0;
               if (isEdit) {
                 bloc.add(UpdateIngredientRequested(
                   id: ingredient.id,
                   name: nameCtrl.text,
                   unitOfMeasurement: unitCtrl.text,
                   costPrice: doubleCost,
+                  minStockAlert: doubleMinStock,
                 ));
                 bloc.add(UpdateStockRequested(
                   id: ingredient.id,
@@ -458,6 +471,7 @@ class _InventoryViewState extends State<_InventoryView> {
                   unitOfMeasurement: unitCtrl.text,
                   currentStock: doubleStock,
                   costPrice: doubleCost,
+                  minStockAlert: doubleMinStock,
                 ));
               }
               Navigator.pop(ctx);

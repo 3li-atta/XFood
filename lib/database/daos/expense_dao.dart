@@ -16,6 +16,13 @@ class ExpenseDao extends DatabaseAccessor<AppDatabase> with _$ExpenseDaoMixin {
     return (select(expenses)..orderBy([(e) => OrderingTerm.desc(e.date)])).get();
   }
 
+  Future<List<Expense>> getAllExpensesPaginated(int limit, int offset) {
+    return (select(expenses)
+          ..orderBy([(e) => OrderingTerm.desc(e.date)])
+          ..limit(limit, offset: offset))
+        .get();
+  }
+
   Future<Expense?> getExpenseById(int id) {
     return (select(expenses)..where((e) => e.id.equals(id))).getSingleOrNull();
   }

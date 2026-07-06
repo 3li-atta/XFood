@@ -47,6 +47,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
     required String unitOfMeasurement,
     required double currentStock,
     required double costPrice,
+    required double minStockAlert,
   }) async {
     final id = await _ingredientDao.insertIngredient(
       IngredientsCompanion.insert(
@@ -54,6 +55,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
         unitOfMeasurement: unitOfMeasurement,
         currentStock: Value(currentStock),
         costPrice: costPrice,
+        minStockAlert: Value(minStockAlert),
       ),
     );
     return getIngredientById(id);
@@ -70,6 +72,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
     String? name,
     String? unitOfMeasurement,
     double? costPrice,
+    double? minStockAlert,
   }) {
     final companion = IngredientsCompanion(
       name: name != null ? Value(name) : const Value.absent(),
@@ -77,6 +80,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
           ? Value(unitOfMeasurement)
           : const Value.absent(),
       costPrice: costPrice != null ? Value(costPrice) : const Value.absent(),
+      minStockAlert: minStockAlert != null ? Value(minStockAlert) : const Value.absent(),
       updatedAt: Value(DateTime.now()),
     );
     return _ingredientDao.updateIngredient(ingredientId, companion);
@@ -95,6 +99,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
       unitOfMeasurement: row.unitOfMeasurement,
       currentStock: row.currentStock,
       costPrice: row.costPrice,
+      minStockAlert: row.minStockAlert,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );

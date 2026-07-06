@@ -117,6 +117,7 @@ class MealRepositoryImpl implements MealRepository {
           unitOfMeasurement: r.ingredient.unitOfMeasurement,
           currentStock: r.ingredient.currentStock,
           costPrice: r.ingredient.costPrice,
+          minStockAlert: r.ingredient.minStockAlert,
           createdAt: r.ingredient.createdAt,
           updatedAt: r.ingredient.updatedAt,
         ),

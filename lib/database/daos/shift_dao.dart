@@ -16,6 +16,15 @@ class ShiftDao extends DatabaseAccessor<AppDatabase> with _$ShiftDaoMixin {
         .getSingleOrNull();
   }
 
+  /// Get any active open shift in the system.
+  Future<Shift?> getAnyActiveShift() {
+    return (select(shifts)
+          ..where((s) => s.status.equals('open'))
+          ..orderBy([(s) => OrderingTerm.desc(s.openedAt)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
   /// Watch active open shift.
   Stream<Shift?> watchActiveShift(int cashierId) {
     return (select(shifts)
@@ -101,6 +110,50 @@ class ShiftDao extends DatabaseAccessor<AppDatabase> with _$ShiftDaoMixin {
             ..limit(1))
           .getSingleOrNull();
       final prevBalance = latest?.balanceAfter ?? 0.0;
+
+      // ── Perform Treasury Balance Integrity Check (P0-07) ──
+      try {
+        final allTxns = await (select(treasuryTransactions)..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+        double calculatedBalance = 0.0;
+        for (final txn in allTxns) {
+          if (txn.type == 'sale_income' || txn.type == 'cash_in' || txn.type == 'shift_open') {
+            calculatedBalance += txn.amount;
+          } else if (txn.type == 'purchase_expense' || txn.type == 'cash_out') {
+            calculatedBalance -= txn.amount;
+          }
+        }
+
+        if ((calculatedBalance - prevBalance).abs() > 0.01) {
+          // Log discrepancy in audit logs
+          await db.into(db.auditLogs).insert(
+            AuditLogsCompanion.insert(
+              userId: shift.cashierId,
+              action: 'treasury_integrity_discrepancy',
+              details: Value('{"shiftId": $shiftId, "expectedCalculated": $calculatedBalance, "storedBalance": $prevBalance, "discrepancy": ${(calculatedBalance - prevBalance).abs()}}'),
+            ),
+          );
+        } else {
+          // Log successful integrity check
+          await db.into(db.auditLogs).insert(
+            AuditLogsCompanion.insert(
+              userId: shift.cashierId,
+              action: 'treasury_integrity_ok',
+              details: Value('{"shiftId": $shiftId, "verifiedBalance": $prevBalance}'),
+            ),
+          );
+        }
+      } catch (e) {
+        // Log failure to perform integrity check
+        try {
+          await db.into(db.auditLogs).insert(
+            AuditLogsCompanion.insert(
+              userId: shift.cashierId,
+              action: 'treasury_integrity_error',
+              details: Value('{"shiftId": $shiftId, "error": "$e"}'),
+            ),
+          );
+        } catch (_) {}
+      }
       
       // Shift close logs reconciled state snapshot
       await into(treasuryTransactions).insert(

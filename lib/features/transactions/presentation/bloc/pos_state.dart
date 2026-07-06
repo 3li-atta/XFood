@@ -8,11 +8,21 @@ class PosState extends Equatable {
   final List<CartItem> cartItems;
   final PosStatus status;
   final String? errorMessage;
+  final String orderType;
+  final String paymentMethod;
+  final int? tableId;
+  final Transaction? completedTransaction;
+  final List<Map<String, dynamic>>? completedTransactionItems;
 
   const PosState({
     this.cartItems = const [],
     this.status = PosStatus.idle,
     this.errorMessage,
+    this.orderType = 'takeaway',
+    this.paymentMethod = 'cash',
+    this.tableId,
+    this.completedTransaction,
+    this.completedTransactionItems,
   });
 
   /// Total amount for the current cart.
@@ -29,17 +39,37 @@ class PosState extends Equatable {
     List<CartItem>? cartItems,
     PosStatus? status,
     String? errorMessage,
+    String? orderType,
+    String? paymentMethod,
+    int? tableId,
+    bool clearTable = false,
+    Transaction? completedTransaction,
+    List<Map<String, dynamic>>? completedTransactionItems,
   }) {
     final nextStatus = status ?? this.status;
     return PosState(
       cartItems: cartItems ?? this.cartItems,
       status: nextStatus,
       errorMessage: errorMessage ?? (nextStatus == PosStatus.error ? this.errorMessage : null),
+      orderType: orderType ?? this.orderType,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      tableId: clearTable ? null : (tableId ?? this.tableId),
+      completedTransaction: completedTransaction ?? (nextStatus == PosStatus.processing || nextStatus == PosStatus.idle ? null : this.completedTransaction),
+      completedTransactionItems: completedTransactionItems ?? (nextStatus == PosStatus.processing || nextStatus == PosStatus.idle ? null : this.completedTransactionItems),
     );
   }
 
   @override
-  List<Object?> get props => [cartItems, status, errorMessage];
+  List<Object?> get props => [
+        cartItems,
+        status,
+        errorMessage,
+        orderType,
+        paymentMethod,
+        tableId,
+        completedTransaction,
+        completedTransactionItems,
+      ];
 }
 
 /// A single item in the POS cart.

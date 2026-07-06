@@ -1,4 +1,6 @@
 import '../../../../core/usecases/usecase.dart';
+import '../../../../core/utils/session_manager.dart';
+import '../../../../core/error/exceptions.dart';
 import '../entities/shift_entity.dart';
 import '../repositories/shift_repository.dart';
 
@@ -19,6 +21,9 @@ class OpenShiftUseCase implements UseCase<int, OpenShiftParams> {
 
   @override
   Future<int> call(OpenShiftParams params) {
+    if (!SessionManager.instance.hasPermission('manage_shifts')) {
+      throw const UnauthorizedException('Permission denied: manage_shifts');
+    }
     return _repository.openShift(
       cashierId: params.cashierId,
       startingCash: params.startingCash,
@@ -45,6 +50,9 @@ class CloseShiftUseCase implements UseCase<void, CloseShiftParams> {
 
   @override
   Future<void> call(CloseShiftParams params) {
+    if (!SessionManager.instance.hasPermission('manage_shifts')) {
+      throw const UnauthorizedException('Permission denied: manage_shifts');
+    }
     return _repository.closeShift(
       shiftId: params.shiftId,
       actualClosingCash: params.actualClosingCash,
@@ -71,6 +79,9 @@ class GetShiftHistoryUseCase implements UseCase<List<ShiftEntity>, NoParams> {
 
   @override
   Future<List<ShiftEntity>> call(NoParams params) {
+    if (!SessionManager.instance.hasPermission('view_reports')) {
+      throw const UnauthorizedException('Permission denied: view_reports');
+    }
     return _repository.getShiftHistory();
   }
 }

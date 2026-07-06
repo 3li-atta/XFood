@@ -23,7 +23,8 @@ class AuthRepositoryImpl implements AuthRepository {
       throw const AuthenticationException('Invalid password');
     }
 
-    return _mapToEntity(user);
+    final permissions = await _userDao.getPermissionsForUser(user.id);
+    return _mapToEntity(user, permissions);
   }
 
   @override
@@ -41,15 +42,23 @@ class AuthRepositoryImpl implements AuthRepository {
 
     final hashedPassword = PasswordHasher.hash(password);
 
-    await _userDao.insertUser(UsersCompanion.insert(
+    final id = await _userDao.insertUser(UsersCompanion.insert(
       username: username,
       passwordHash: hashedPassword,
       recoveryEmail: recoveryEmail,
       role: role,
     ));
 
+    // Assign default permissions based on role
+    final defaultPermissions = role == 'admin'
+        ? ['make_sales', 'manage_shifts', 'manage_inventory', 'manage_meals', 'view_transactions', 'view_reports', 'manage_purchases', 'manage_treasury', 'manage_backup', 'void_refund_sale', 'apply_large_discount', 'manage_users']
+        : ['make_sales', 'manage_shifts'];
+
+    await _userDao.assignPermissions(id, defaultPermissions);
+
     final user = await _userDao.findByUsername(username);
-    return _mapToEntity(user!);
+    final permissions = await _userDao.getPermissionsForUser(user!.id);
+    return _mapToEntity(user, permissions);
   }
 
   @override
@@ -66,7 +75,12 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<List<UserEntity>> getAllUsers() async {
     final users = await _userDao.getAllUsers();
-    return users.map(_mapToEntity).toList();
+    final List<UserEntity> entities = [];
+    for (final user in users) {
+      final permissions = await _userDao.getPermissionsForUser(user.id);
+      entities.add(_mapToEntity(user, permissions));
+    }
+    return entities;
   }
 
   @override
@@ -91,14 +105,20 @@ class AuthRepositoryImpl implements AuthRepository {
     return _userDao.updatePasswordAndClearForceFlag(userId, hashedPassword);
   }
 
+  @override
+  Future<void> assignPermissions(int userId, List<String> permissions) async {
+    await _userDao.assignPermissions(userId, permissions);
+  }
+
   /// Map Drift-generated [User] row to pure [UserEntity].
-  UserEntity _mapToEntity(User user) {
+  UserEntity _mapToEntity(User user, List<String> permissions) {
     return UserEntity(
       id: user.id,
       username: user.username,
       recoveryEmail: user.recoveryEmail,
       role: user.role,
       mustChangePassword: user.mustChangePassword,
+      permissions: permissions,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     );

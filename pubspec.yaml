@@ -1,7 +1,7 @@
 name: xfood_pos
 description: Offline-first Flutter POS application for food service.
 publish_to: 'none'
-version: 1.0.2+3
+version: 1.0.3+4
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -45,11 +45,25 @@ dependencies:
   http: ^1.2.1
   restart_app: ^1.2.1
 
+  # PDF Generation and Printing
+  pdf: ^3.10.8
+  printing: ^5.11.1
+
   # Custom OTA Update System
   package_info_plus: ^8.0.0
   dio: ^5.5.0
   open_filex: ^4.5.0
   workmanager: ^0.9.0+3
+
+  # LAN Sync Server (P2P / Local Network)
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
+  shelf_web_socket: ^2.0.1
+  web_socket_channel: ^3.0.0
+  network_info_plus: ^6.0.1
+  nsd: ^5.0.1
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.2.0
 
 dev_dependencies:
   flutter_test:

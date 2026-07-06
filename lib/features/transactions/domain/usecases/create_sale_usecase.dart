@@ -1,4 +1,6 @@
 import '../../../../core/usecases/usecase.dart';
+import '../../../../core/utils/session_manager.dart';
+import '../../../../core/error/exceptions.dart';
 import '../entities/transaction_entity.dart';
 import '../repositories/transaction_repository.dart';
 
@@ -10,6 +12,10 @@ class CreateSaleParams {
   final String? notes;
   final List<SaleInput> items;
   final double discountPercentage;
+  final double taxPercentage;
+  final String orderType;
+  final String paymentMethod;
+  final int? tableId;
 
   const CreateSaleParams({
     required this.userId,
@@ -18,6 +24,10 @@ class CreateSaleParams {
     this.notes,
     required this.items,
     this.discountPercentage = 0.0,
+    this.taxPercentage = 0.0,
+    this.orderType = 'takeaway',
+    this.paymentMethod = 'cash',
+    this.tableId,
   });
 }
 
@@ -29,6 +39,9 @@ class CreateSaleUseCase implements UseCase<int, CreateSaleParams> {
 
   @override
   Future<int> call(CreateSaleParams params) {
+    if (!SessionManager.instance.hasPermission('make_sales')) {
+      throw const UnauthorizedException('Permission denied: make_sales');
+    }
     return _repository.createSale(
       userId: params.userId,
       shiftId: params.shiftId,
@@ -36,6 +49,10 @@ class CreateSaleUseCase implements UseCase<int, CreateSaleParams> {
       notes: params.notes,
       items: params.items,
       discountPercentage: params.discountPercentage,
+      taxPercentage: params.taxPercentage,
+      orderType: params.orderType,
+      paymentMethod: params.paymentMethod,
+      tableId: params.tableId,
     );
   }
 }
@@ -49,6 +66,9 @@ class GetTransactionsUseCase
 
   @override
   Future<List<TransactionEntity>> call(NoParams params) {
+    if (!SessionManager.instance.hasPermission('view_transactions')) {
+      throw const UnauthorizedException('Permission denied: view_transactions');
+    }
     return _repository.getAllTransactions();
   }
 }

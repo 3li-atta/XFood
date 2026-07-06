@@ -1,10 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:xfood_pos/core/di/injection.dart';
+import 'package:xfood_pos/core/services/device_config_service.dart';
+import 'package:xfood_pos/core/services/lan_sync/lan_client_service.dart';
 import 'router.dart';
 
 /// Root widget for the XFood POS application.
-class XFoodApp extends StatelessWidget {
+class XFoodApp extends StatefulWidget {
   const XFoodApp({super.key});
+
+  @override
+  State<XFoodApp> createState() => _XFoodAppState();
+}
+
+class _XFoodAppState extends State<XFoodApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // Auto-connect client on startup if configured
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final config = getIt<DeviceConfigService>();
+        if (!config.isMaster) {
+          getIt<LanClientService>().connect();
+        }
+      } catch (_) {}
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      try {
+        final config = getIt<DeviceConfigService>();
+        if (!config.isMaster) {
+          // Instantly trigger reconnect for client/KDS devices when app resumes
+          getIt<LanClientService>().connect();
+        }
+      } catch (_) {
+        // Safe check if services are not registered yet
+      }
+    }
+  }
 
   // ── Brand Colors ──────────────────────────────────────────────────────
   static const Color _primaryBlue = Color(0xFF1E3A8A);

@@ -4,6 +4,9 @@ import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:sqlite3/sqlite3.dart' as sqlite;
+import '../../../../core/di/injection.dart';
+import '../../../../database/app_database.dart';
 import '../../domain/services/backup_service.dart';
 
 class GoogleHttpClient extends http.BaseClient {
@@ -70,6 +73,14 @@ class GoogleDriveBackupService implements BackupService {
   Future<String?> backupDatabase() async {
     final driveApi = await _getDriveApi();
     if (driveApi == null) throw Exception('User not authenticated.');
+
+    // ── Checkpoint WAL before backing up ──
+    try {
+      final db = getIt<AppDatabase>();
+      await db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
+    } catch (_) {
+      // Ignore if DB is not initialized yet or closed
+    }
 
     // 1. Get database path
     final dbFolder = await getApplicationDocumentsDirectory();
@@ -152,15 +163,76 @@ class GoogleDriveBackupService implements BackupService {
     await response.stream.forEach((chunk) => sink.add(chunk));
     await sink.close();
 
-    // 4. Safely swap database files
-    final liveDbPath = p.join(dbFolder.path, 'xfood_pos.sqlite');
-    final liveDbFile = File(liveDbPath);
+    // 4. Validate database integrity using sqlite3
+    try {
+      final sqliteDb = sqlite.sqlite3.open(tempPath);
+      final result = sqliteDb.select('PRAGMA integrity_check');
+      sqliteDb.dispose();
 
-    if (await liveDbFile.exists()) {
-      await liveDbFile.delete();
+      if (result.isEmpty || result.first.values.first != 'ok') {
+        throw Exception('Database integrity check failed: $result');
+      }
+    } catch (e) {
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+      throw Exception('Downloaded database file is corrupted or invalid: $e');
     }
 
-    await tempFile.rename(liveDbPath);
-    return true;
+    // 5. Safely close database connection before swapping files
+    final liveDbPath = p.join(dbFolder.path, 'xfood_pos.sqlite');
+    final liveDbFile = File(liveDbPath);
+    final bakDbPath = p.join(dbFolder.path, 'xfood_pos.sqlite.bak');
+    final bakDbFile = File(bakDbPath);
+
+    // Backup active DB
+    if (await liveDbFile.exists()) {
+      if (bakDbFile.existsSync()) {
+        bakDbFile.deleteSync();
+      }
+      await liveDbFile.copy(bakDbPath);
+    }
+
+    try {
+      final db = getIt<AppDatabase>();
+      await db.close();
+    } catch (_) {
+      // Ignore if already closed or not initialized
+    }
+
+    // 6. Delete live database, WAL, and SHM files to prevent recovery corruption
+    try {
+      if (await liveDbFile.exists()) {
+        await liveDbFile.delete();
+      }
+
+      final walFile = File('$liveDbPath-wal');
+      if (await walFile.exists()) {
+        await walFile.delete();
+      }
+
+      final shmFile = File('$liveDbPath-shm');
+      if (await shmFile.exists()) {
+        await shmFile.delete();
+      }
+
+      // Rename temp file to live
+      await tempFile.rename(liveDbPath);
+
+      // Clean up backup on success
+      if (bakDbFile.existsSync()) {
+        bakDbFile.deleteSync();
+      }
+      return true;
+    } catch (e) {
+      // Rollback on failure
+      if (bakDbFile.existsSync()) {
+        if (liveDbFile.existsSync()) {
+          liveDbFile.deleteSync();
+        }
+        await bakDbFile.rename(liveDbPath);
+      }
+      throw Exception('Failed to replace database file: $e');
+    }
   }
 }

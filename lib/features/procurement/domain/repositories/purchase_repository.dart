@@ -14,7 +14,7 @@ abstract class PurchaseRepository {
 
   Future<List<PurchaseItemEntity>> getItemsForInvoice(int invoiceId);
 
-  Future<bool> voidPurchaseInvoice(int invoiceId);
+  Future<bool> voidPurchaseInvoice(int invoiceId, String reason);
 }
 
 class PurchaseItemInputEntity {

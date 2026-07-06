@@ -11,6 +11,7 @@ import 'package:xfood_pos/database/daos/shift_dao.dart';
 import 'package:xfood_pos/database/daos/purchase_dao.dart';
 import 'package:xfood_pos/database/daos/treasury_dao.dart';
 import 'package:xfood_pos/core/error/exceptions.dart';
+import 'package:xfood_pos/features/shifts/data/repositories/shift_repository_impl.dart';
 
 void main() {
   late AppDatabase db;
@@ -79,6 +80,10 @@ void main() {
       final updatedIngredient = await ingredientDao.getById(ingId);
       expect(updatedIngredient.currentStock, 20.0);
       expect(updatedIngredient.costPrice, 3.0);
+
+      // Verify Shift totalPurchases updated
+      final shift = await shiftDao.getById(shiftId);
+      expect(shift.totalPurchases, 40.0);
 
       // 4. Verify Treasury transaction exists
       final balance = await treasuryDao.getCurrentBalance();
@@ -157,6 +162,41 @@ void main() {
       expect(closedShift.status, 'closed');
       expect(closedShift.variance, 0.0);
     });
+
+    test('should fallback to active cashier shift when queried for an Admin user', () async {
+      final adminId = await userDao.insertUser(const UsersCompanion(
+        username: drift.Value('admin'),
+        passwordHash: drift.Value('admin_hash'),
+        recoveryEmail: drift.Value('admin@local.net'),
+        role: drift.Value('admin'),
+      ));
+
+      final cashierId = await userDao.insertUser(const UsersCompanion(
+        username: drift.Value('cashier'),
+        passwordHash: drift.Value('cashier_hash'),
+        recoveryEmail: drift.Value('cashier@local.net'),
+        role: drift.Value('cashier'),
+      ));
+
+      // Open shift for cashier
+      final cashierShiftId = await shiftDao.openShift(cashierId: cashierId, startingCash: 200.0);
+
+      // Query getActiveShift for cashier -> should return cashier's shift
+      final cashierShift = await shiftDao.getActiveShift(cashierId);
+      expect(cashierShift, isNotNull);
+      expect(cashierShift!.id, cashierShiftId);
+
+      // Query getActiveShift for admin -> should return null at DAO level since shift is owned by cashier
+      final adminShiftDao = await shiftDao.getActiveShift(adminId);
+      expect(adminShiftDao, isNull);
+
+      // Query getActiveShift via repository for admin -> should fallback to cashier's open shift
+      final shiftRepo = ShiftRepositoryImpl(shiftDao, userDao);
+      final adminShiftRepo = await shiftRepo.getActiveShift(adminId);
+      expect(adminShiftRepo, isNotNull);
+      expect(adminShiftRepo!.id, cashierShiftId);
+      expect(adminShiftRepo.cashierId, cashierId);
+    });
   });
 
   group('Security and User Authentication Tests (V-12)', () {
@@ -178,6 +218,39 @@ void main() {
       final updatedUser = (await userDao.getAllUsers()).firstWhere((u) => u.id == userId);
       expect(updatedUser.mustChangePassword, isFalse);
       expect(updatedUser.passwordHash, 'new_hashed_password');
+    });
+  });
+
+  group('RBAC and Granular Permissions Tests', () {
+    test('should assign and fetch user permissions correctly', () async {
+      final userId = await userDao.insertUser(const UsersCompanion(
+        username: drift.Value('test_cashier'),
+        passwordHash: drift.Value('hash'),
+        recoveryEmail: drift.Value('cashier@local.net'),
+        role: drift.Value('cashier'),
+      ));
+
+      // Fetch permissions initially -> should be empty
+      final initialPermissions = await userDao.getPermissionsForUser(userId);
+      expect(initialPermissions, isEmpty);
+
+      // Assign permissions
+      final assigned = ['make_sales', 'manage_shifts'];
+      await userDao.assignPermissions(userId, assigned);
+
+      // Fetch again -> should match
+      final updated = await userDao.getPermissionsForUser(userId);
+      expect(updated, containsAll(assigned));
+      expect(updated.length, 2);
+
+      // Replace permissions
+      final replacement = ['make_sales', 'void_refund_sale'];
+      await userDao.assignPermissions(userId, replacement);
+
+      final finalPerms = await userDao.getPermissionsForUser(userId);
+      expect(finalPerms, containsAll(replacement));
+      expect(finalPerms.contains('manage_shifts'), isFalse);
+      expect(finalPerms.length, 2);
     });
   });
 }

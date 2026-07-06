@@ -7,10 +7,12 @@ import '../features/inventory/presentation/pages/inventory_page.dart';
 import '../features/meals/presentation/pages/meals_page.dart';
 import '../features/transactions/presentation/pages/transactions_page.dart';
 import '../features/transactions/presentation/pages/profit_loss_page.dart';
+import '../features/reports/presentation/pages/reports_hub_page.dart';
 import '../features/shifts/presentation/pages/shift_page.dart';
 import '../features/procurement/presentation/pages/purchase_page.dart';
 import '../features/treasury/presentation/pages/treasury_page.dart';
 import '../features/backup/presentation/pages/backup_page.dart';
+import '../features/settings/presentation/pages/device_settings_page.dart';
 
 /// Application router configuration using GoRouter.
 ///
@@ -46,19 +48,21 @@ final appRouter = GoRouter(
       return '/pos';
     }
 
-    // Role-based route guard enforcement (V-07)
-    final adminOnlyRoutes = [
-      '/inventory',
-      '/meals',
-      '/transactions',
-      '/profit-loss',
-      '/purchases',
-      '/treasury',
-      '/backup',
-    ];
-    final isAdminRoute = adminOnlyRoutes.contains(state.matchedLocation);
-    if (isLoggedIn && isAdminRoute && !SessionManager.instance.isAdmin) {
-      return '/pos'; // cashier restricted to POS & Shifts
+    // Granular permission-based route guard enforcement (V-07)
+    final routePermissions = {
+      '/inventory': 'manage_inventory',
+      '/meals': 'manage_meals',
+      '/transactions': 'view_transactions',
+      '/profit-loss': 'view_reports',
+      '/reports': 'view_reports',
+      '/purchases': 'manage_purchases',
+      '/treasury': 'manage_treasury',
+      '/backup': 'manage_backup',
+    };
+
+    final requiredPermission = routePermissions[state.matchedLocation];
+    if (isLoggedIn && requiredPermission != null && !SessionManager.instance.hasPermission(requiredPermission)) {
+      return '/pos'; // Redirect to POS if lacking specific permission
     }
 
     // No redirect needed
@@ -101,6 +105,11 @@ final appRouter = GoRouter(
       builder: (context, state) => const ProfitLossPage(),
     ),
     GoRoute(
+      path: '/reports',
+      name: 'reports',
+      builder: (context, state) => const ReportsHubPage(),
+    ),
+    GoRoute(
       path: '/shifts',
       name: 'shifts',
       builder: (context, state) => const ShiftPage(),
@@ -119,6 +128,11 @@ final appRouter = GoRouter(
       path: '/backup',
       name: 'backup',
       builder: (context, state) => const BackupPage(),
+    ),
+    GoRoute(
+      path: '/settings/device',
+      name: 'device-settings',
+      builder: (context, state) => const DeviceSettingsPage(),
     ),
   ],
 );

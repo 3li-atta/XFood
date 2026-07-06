@@ -64,8 +64,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }
 
   @override
-  Future<bool> voidPurchaseInvoice(int invoiceId) {
-    return _purchaseDao.voidPurchaseInvoice(invoiceId);
+  Future<bool> voidPurchaseInvoice(int invoiceId, String reason) {
+    return _purchaseDao.voidPurchaseInvoice(
+      invoiceId: invoiceId,
+      reason: reason,
+    );
   }
 
   PurchaseInvoiceEntity _mapInvoiceToEntity(PurchaseInvoice row) {

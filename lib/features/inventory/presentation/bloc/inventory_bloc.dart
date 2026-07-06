@@ -53,6 +53,7 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
         unitOfMeasurement: event.unitOfMeasurement,
         currentStock: event.currentStock,
         costPrice: event.costPrice,
+        minStockAlert: event.minStockAlert,
       );
     } catch (e) {
       emit(InventoryError(e.toString()));
@@ -67,6 +68,7 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
         name: event.name,
         unitOfMeasurement: event.unitOfMeasurement,
         costPrice: event.costPrice,
+        minStockAlert: event.minStockAlert,
       );
     } catch (e) {
       emit(InventoryError(e.toString()));

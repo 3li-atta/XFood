@@ -15,6 +15,10 @@ import 'tables/purchase_invoices_table.dart';
 import 'tables/purchase_items_table.dart';
 import 'tables/treasury_transactions_table.dart';
 import 'tables/expenses_table.dart';
+import 'tables/audit_logs_table.dart';
+import 'tables/tables_table.dart';
+import 'tables/pending_orders_table.dart';
+import 'tables/user_permissions_table.dart';
 
 import 'daos/user_dao.dart';
 import 'daos/ingredient_dao.dart';
@@ -25,6 +29,10 @@ import 'daos/shift_dao.dart';
 import 'daos/purchase_dao.dart';
 import 'daos/treasury_dao.dart';
 import 'daos/expense_dao.dart';
+import 'daos/audit_log_dao.dart';
+import 'daos/table_dao.dart';
+import 'daos/pending_order_dao.dart';
+import 'daos/reports_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -45,6 +53,10 @@ part 'app_database.g.dart';
     PurchaseItems,
     TreasuryTransactions,
     Expenses,
+    AuditLogs,
+    Tables,
+    PendingOrders,
+    UserPermissions,
   ],
   daos: [
     UserDao,
@@ -56,6 +68,10 @@ part 'app_database.g.dart';
     PurchaseDao,
     TreasuryDao,
     ExpenseDao,
+    AuditLogDao,
+    TableDao,
+    PendingOrderDao,
+    ReportsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -66,7 +82,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -203,6 +219,39 @@ class AppDatabase extends _$AppDatabase {
           if (from < 3) {
             await m.create(expenses);
           }
+          if (from < 4) {
+            await m.create(auditLogs);
+          }
+          if (from < 5) {
+            await m.addColumn(transactions, transactions.subtotalAmount);
+            await m.addColumn(transactions, transactions.discountAmount);
+            await m.addColumn(transactions, transactions.taxAmount);
+          }
+          if (from < 6) {
+            await m.createIndex(idxMealsCategory);
+            await m.createIndex(idxMealsIsActive);
+            await m.createIndex(idxTransactionsCreatedAt);
+            await m.createIndex(idxTransactionsType);
+            await m.createIndex(idxTransactionsShiftId);
+            await m.createIndex(idxTransactionItemsTransactionId);
+            await m.createIndex(idxPurchaseInvoicesStatus);
+            await m.createIndex(idxPurchaseInvoicesCreatedAt);
+            await m.createIndex(idxTreasuryTransactionsShiftId);
+            await m.createIndex(idxTreasuryTransactionsCreatedAt);
+          }
+          if (from < 7) {
+            await m.create(tables);
+            await m.create(pendingOrders);
+            await m.addColumn(transactions, transactions.orderType);
+            await m.addColumn(transactions, transactions.paymentMethod);
+            await m.addColumn(transactions, transactions.tableId);
+          }
+          if (from < 8) {
+            await m.create(userPermissions);
+          }
+          if (from < 9) {
+            await m.addColumn(ingredients, ingredients.minStockAlert);
+          }
         },
         beforeOpen: (details) async {
           // Enable foreign key enforcement in SQLite.
@@ -216,6 +265,6 @@ LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'xfood_pos.sqlite'));
-    return NativeDatabase.createInBackground(file);
+    return NativeDatabase(file);
   });
 }

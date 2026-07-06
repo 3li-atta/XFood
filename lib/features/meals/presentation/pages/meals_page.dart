@@ -126,19 +126,52 @@ class _MealsView extends StatelessWidget {
               child: const Text('Cancel')),
           FilledButton(
             onPressed: () {
-              final doublePrice = double.tryParse(priceCtrl.text) ?? 0.0;
+              final name = nameCtrl.text.trim();
+              final category = catCtrl.text.trim();
+              final doublePrice = double.tryParse(priceCtrl.text);
+
+              if (name.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Meal name is required.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              if (doublePrice == null || doublePrice <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid price greater than 0.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              if (category.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Category is required.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
               if (isEdit) {
                 bloc.add(UpdateMealRequested(
                   id: meal.id,
-                  name: nameCtrl.text,
+                  name: name,
                   sellingPrice: doublePrice,
-                  category: catCtrl.text,
+                  category: category,
                 ));
               } else {
                 bloc.add(CreateMealRequested(
-                  name: nameCtrl.text,
+                  name: name,
                   sellingPrice: doublePrice,
-                  category: catCtrl.text,
+                  category: category,
                 ));
               }
               Navigator.pop(ctx);

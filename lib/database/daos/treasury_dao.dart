@@ -25,6 +25,14 @@ class TreasuryDao extends DatabaseAccessor<AppDatabase> with _$TreasuryDaoMixin 
         .get();
   }
 
+  /// Get treasury transactions paginated.
+  Future<List<TreasuryTransaction>> getTransactionsPaginated(int limit, int offset) {
+    return (select(treasuryTransactions)
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(limit, offset: offset))
+        .get();
+  }
+
   /// Get treasury transactions for a shift
   Future<List<TreasuryTransaction>> getTransactionsForShift(int shiftId) {
     return (select(treasuryTransactions)
@@ -90,6 +98,15 @@ class TreasuryDao extends DatabaseAccessor<AppDatabase> with _$TreasuryDaoMixin 
           );
         }
       }
+
+      // Audit Log logging
+      await db.into(db.auditLogs).insert(
+        AuditLogsCompanion.insert(
+          userId: userId,
+          action: 'treasury_adjustment',
+          details: Value('{"adjustmentId": $txnId, "type": "$type", "amount": $amount, "description": "$description"}'),
+        ),
+      );
 
       return txnId;
     });

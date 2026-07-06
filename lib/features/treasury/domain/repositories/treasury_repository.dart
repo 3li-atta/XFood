@@ -3,6 +3,7 @@ import '../entities/treasury_transaction_entity.dart';
 abstract class TreasuryRepository {
   Future<double> getCurrentBalance();
   Future<List<TreasuryTransactionEntity>> getAllTransactions();
+  Future<List<TreasuryTransactionEntity>> getTransactionsPaginated(int limit, int offset);
   Future<List<TreasuryTransactionEntity>> getTransactionsForShift(int shiftId);
   Stream<double> watchBalance();
   Future<int> addManualAdjustment({

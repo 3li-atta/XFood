@@ -7,6 +7,8 @@ import '../bloc/shift_bloc.dart';
 import '../../domain/entities/shift_entity.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/utils/session_manager.dart';
+import '../../../../core/services/device_config_service.dart';
+import '../../../../database/app_database.dart';
 import '../../../expenses/presentation/bloc/expense_bloc.dart';
 import '../../../expenses/presentation/bloc/expense_event.dart';
 import '../../../expenses/presentation/bloc/expense_state.dart';
@@ -37,9 +39,10 @@ class _ShiftView extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Shift Management (إدارة الوردية)'),
+        title: const Text('إدارة الورديات', style: TextStyle(fontWeight: FontWeight.bold)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+          tooltip: 'العودة للمبيعات',
           onPressed: () => context.go('/pos'),
         ),
       ),
@@ -55,7 +58,7 @@ class _ShiftView extends StatelessWidget {
           } else if (state.status == ShiftStatus.closed && state.closedShiftId != null) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('✓ Shift closed successfully!'),
+                content: const Text('✓ تم إغلاق الوردية بنجاح!'),
                 backgroundColor: colorScheme.primary,
               ),
             );
@@ -90,7 +93,7 @@ class _ShiftView extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Shift History (سجل الورديات)',
+                            'سجل الورديات',
                             style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const Divider(height: 24),
@@ -143,7 +146,7 @@ class _ShiftView extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Shift History (سجل الورديات)',
+                            'سجل الورديات',
                             style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const Divider(height: 24),
@@ -166,7 +169,7 @@ class _ShiftView extends StatelessWidget {
   Widget _buildActiveShiftSection(BuildContext context, ShiftState state, {required bool isMobile}) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final session = SessionManager.instance;
+    final isMaster = getIt<DeviceConfigService>().isMaster;
 
     if (state.status == ShiftStatus.loading && state.activeShift == null) {
       return const Center(child: CircularProgressIndicator());
@@ -188,7 +191,7 @@ class _ShiftView extends StatelessWidget {
               Icon(Icons.check_circle_outline, color: colorScheme.primary, size: 32),
               const SizedBox(width: 8),
               Text(
-                'Active Shift Open',
+                'الوردية النشطة مفتوحة',
                 style: theme.textTheme.titleLarge?.copyWith(
                   color: colorScheme.primary,
                   fontWeight: FontWeight.bold,
@@ -197,21 +200,21 @@ class _ShiftView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _buildInfoRow('Shift ID', '#${shift.id}'),
-          _buildInfoRow('Cashier Name', shift.cashierName),
-          _buildInfoRow('Opened At', DateFormat.yMd().add_jm().format(shift.openedAt)),
+          _buildInfoRow('رقم الوردية', '#${shift.id}'),
+          _buildInfoRow('اسم الكاشير', shift.cashierName),
+          _buildInfoRow('تاريخ ووقت الفتح', DateFormat('yyyy-MM-dd HH:mm').format(shift.openedAt)),
           const Divider(height: 32),
-          _buildInfoRow('Starting Cash (العهدة)', '${shift.startingCash.toStringAsFixed(2)} ج.م'),
-          _buildInfoRow('Total Sales (المبيعات)', '${shift.totalSales.toStringAsFixed(2)} ج.م', color: colorScheme.primary),
-          _buildInfoRow('Total Purchases (المشتريات)', '-${shift.totalPurchases.toStringAsFixed(2)} ج.م', color: colorScheme.error),
-          _buildInfoRow('Manual Cash In', '${shift.totalCashIn.toStringAsFixed(2)} ج.م'),
-          _buildInfoRow('Manual Cash Out', '-${shift.totalCashOut.toStringAsFixed(2)} ج.م'),
+          _buildInfoRow('العهدة الافتتاحية', '${shift.startingCash.toStringAsFixed(2)} ج.م'),
+          _buildInfoRow('إجمالي المبيعات', '${shift.totalSales.toStringAsFixed(2)} ج.م', color: colorScheme.primary),
+          _buildInfoRow('إجمالي المشتريات (المصروفات)', '-${shift.totalPurchases.toStringAsFixed(2)} ج.م', color: colorScheme.error),
+          _buildInfoRow('الإدخال النقدي اليدوي', '${shift.totalCashIn.toStringAsFixed(2)} ج.م'),
+          _buildInfoRow('الصرف النقدي اليدوي', '-${shift.totalCashOut.toStringAsFixed(2)} ج.م'),
           const Divider(height: 32),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Expected Closing Cash:',
+                'النقد المتوقع في الدرج:',
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               Text(
@@ -224,36 +227,60 @@ class _ShiftView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: OutlinedButton.icon(
-              onPressed: () => _showAddExpenseDialog(context, shift.id),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: colorScheme.primary, width: 1.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              icon: Icon(Icons.money_off, color: colorScheme.primary),
-              label: Text(
-                'تسجيل مصروف (إضافة مصروف)',
-                style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.primary),
+          if (isMaster) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: () => _showAddExpenseDialog(context, shift.id),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: colorScheme.primary, width: 1.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: Icon(Icons.money_off, color: colorScheme.primary),
+                label: Text(
+                  'تسجيل مصروف تشغيلي',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.primary),
+                ),
               ),
             ),
-          ),
-          if (isMobile) const SizedBox(height: 32) else const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: FilledButton.icon(
-              onPressed: () => _showCloseShiftDialog(context, shift, expectedCash),
-              style: FilledButton.styleFrom(
-                backgroundColor: colorScheme.error,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            if (isMobile) const SizedBox(height: 32) else const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: () => _showCloseShiftDialog(context, shift, expectedCash),
+                style: FilledButton.styleFrom(
+                  backgroundColor: colorScheme.error,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.lock),
+                label: const Text('إغلاق الوردية وتصدير التقرير'),
               ),
-              icon: const Icon(Icons.lock),
-              label: const Text('Close Shift (غلق الوردية)'),
             ),
-          ),
+          ] else ...[
+            if (isMobile) const SizedBox(height: 32) else const Spacer(),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue.shade700),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'تسجيل المصروفات وإغلاق الوردية متاح فقط من الكاشير الرئيسي.',
+                      style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       );
     }
@@ -265,27 +292,49 @@ class _ShiftView extends StatelessWidget {
         Icon(Icons.lock_open_outlined, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3), size: 80),
         const SizedBox(height: 16),
         Text(
-          'No Active Shift Open',
+          'لا توجد وردية نشطة مفتوحة',
           style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         const Text(
-          'You must open a shift (enter starting cash) before processing transactions.',
+          'يجب فتح وردية جديدة وتحديد عهدة البداية قبل البدء في معالجة المعاملات والمبيعات.',
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: FilledButton.icon(
-            onPressed: () => _showOpenShiftDialog(context),
-            style: FilledButton.styleFrom(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        if (isMaster)
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: () => _showOpenShiftDialog(context),
+              style: FilledButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.add),
+              label: const Text('فتح وردية جديدة'),
             ),
-            icon: const Icon(Icons.add),
-            label: const Text('Open New Shift (فتح وردية جديدة)'),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'يرجى فتح وردية جديدة من جهاز الكاشير الرئيسي لبدء المبيعات.',
+                    style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
@@ -296,7 +345,7 @@ class _ShiftView extends StatelessWidget {
     }
     final shifts = state.history;
     if (shifts.isEmpty) {
-      return const Center(child: Text('No previous shifts found.'));
+      return const Center(child: Text('لم يتم العثور على ورديات سابقة.'));
     }
     return ListView.separated(
       shrinkWrap: shrinkWrap,
@@ -307,11 +356,12 @@ class _ShiftView extends StatelessWidget {
         final s = shifts[index];
         final isOpen = s.status == 'open';
         return ListTile(
-          title: Text('Shift #${s.id} - ${s.cashierName}'),
+          title: Text('وردية رقم #${s.id} - الكاشير: ${s.cashierName}'),
           subtitle: Text(
             isOpen
-                ? 'Opened: ${DateFormat.yMd().add_jm().format(s.openedAt)}'
-                : 'Closed: ${s.closedAt != null ? DateFormat.yMd().add_jm().format(s.closedAt!) : "-"}',
+                ? 'تم الفتح: ${DateFormat('yyyy-MM-dd HH:mm').format(s.openedAt)}'
+                : 'تم الإغلاق: ${s.closedAt != null ? DateFormat('yyyy-MM-dd HH:mm').format(s.closedAt!) : "-"}',
+            style: const TextStyle(fontSize: 12),
           ),
           trailing: SizedBox(
             width: 120,
@@ -326,7 +376,7 @@ class _ShiftView extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    isOpen ? 'OPEN' : 'CLOSED',
+                    isOpen ? 'مفتوحة' : 'مغلقة',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -337,7 +387,7 @@ class _ShiftView extends StatelessWidget {
                 const SizedBox(height: 4),
                 if (!isOpen && s.variance != null)
                   Text(
-                    'Variance: ${s.variance!.toStringAsFixed(2)} ج.م',
+                    'الفارق: ${s.variance!.toStringAsFixed(2)} ج.م',
                     style: TextStyle(
                       fontSize: 11,
                       color: s.variance! < 0 ? Colors.red : (s.variance! > 0 ? Colors.blue : Colors.green),
@@ -522,20 +572,33 @@ class _ShiftView extends StatelessWidget {
     showDialog(
       context: context,
       builder: (dlgContext) => AlertDialog(
-        title: const Text('Open Shift (فتح الوردية)'),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            labelText: 'Starting Cash / العهدة (ج.م)',
-            hintText: 'e.g. 100.00',
-            border: OutlineInputBorder(),
+        title: const Text('فتح وردية جديدة', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Directionality(
+          textDirection: ui.TextDirection.rtl,
+          child: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                TextField(
+                  controller: controller,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'مبلغ عهدة البداية (ج.م) *',
+                    hintText: 'مثال: 100.00',
+                    prefixIcon: Icon(Icons.wallet_giftcard_rounded),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dlgContext),
-            child: const Text('Cancel'),
+            child: const Text('إلغاء'),
           ),
           FilledButton(
             onPressed: () {
@@ -548,7 +611,7 @@ class _ShiftView extends StatelessWidget {
                   );
               Navigator.pop(dlgContext);
             },
-            child: const Text('Open Shift'),
+            child: const Text('فتح الوردية'),
           ),
         ],
       ),
@@ -561,34 +624,135 @@ class _ShiftView extends StatelessWidget {
     showDialog(
       context: context,
       builder: (dlgContext) => AlertDialog(
-        title: const Text('Close Shift (غلق الوردية)'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Expected cash in drawer: ${expectedCash.toStringAsFixed(2)} ج.م'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Actual Cash Counted / العد الفعلي (ج.م)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: notesController,
-              decoration: const InputDecoration(
-                labelText: 'Notes (Optional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
+        title: const Text('إغلاق الوردية وتقرير Z', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+        content: SizedBox(
+          width: 450,
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: getIt<AppDatabase>().transactionDao.getZReportData(shift.id),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SizedBox(
+                  height: 150,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final data = snapshot.data ?? {};
+              final cashSales = data['cashSales'] as double? ?? 0.0;
+              final cardSales = data['cardSales'] as double? ?? 0.0;
+              final onlineSales = data['onlineSales'] as double? ?? 0.0;
+              final totalDiscounts = data['totalDiscounts'] as double? ?? 0.0;
+              final totalTax = data['totalTax'] as double? ?? 0.0;
+              final refundsCount = data['refundsCount'] as int? ?? 0;
+              final refundAmount = data['refundAmount'] as double? ?? 0.0;
+
+              return Directionality(
+                textDirection: ui.TextDirection.rtl,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Z-Report Summary Box
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E3A8A).withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF1E3A8A).withValues(alpha: 0.15)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.analytics_rounded, color: Color(0xFF1E3A8A), size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'تفاصيل المبيعات حسب طريقة الدفع:',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E3A8A)),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 20),
+                            _buildInfoRow('مبيعات نقداً', '${cashSales.toStringAsFixed(2)} ج.م'),
+                            _buildInfoRow('مبيعات شبكة / بطاقة', '${cardSales.toStringAsFixed(2)} ج.م'),
+                            _buildInfoRow('مبيعات أونلاين', '${onlineSales.toStringAsFixed(2)} ج.م'),
+                            const Divider(height: 20),
+                            _buildInfoRow('إجمالي الخصومات', '${totalDiscounts.toStringAsFixed(2)} ج.م'),
+                            _buildInfoRow('إجمالي الضريبة (14%)', '${totalTax.toStringAsFixed(2)} ج.م'),
+                            _buildInfoRow('عدد المرتجعات', '$refundsCount'),
+                            _buildInfoRow('إجمالي المرتجعات', '${refundAmount.toStringAsFixed(2)} ج.م', color: Colors.red),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Expected Cash Box
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.payments_outlined, color: Color(0xFF10B981), size: 28),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'النقد المتوقع في الدرج',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${expectedCash.toStringAsFixed(2)} ج.م',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF10B981),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: controller,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'المبلغ الفعلي المقبوض في الدرج (ج.م) *',
+                          hintText: 'أدخل المبلغ المحسوب فعلياً في الصندوق...',
+                          prefixIcon: Icon(Icons.calculate_outlined),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: notesController,
+                        decoration: const InputDecoration(
+                          labelText: 'ملاحظات إضافية (اختياري)',
+                          hintText: 'توضيح أي عجز أو زيادة إن وجد...',
+                          prefixIcon: Icon(Icons.note_alt_outlined),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dlgContext),
-            child: const Text('Cancel'),
+            child: const Text('إلغاء'),
           ),
           FilledButton(
             onPressed: () {
@@ -602,7 +766,10 @@ class _ShiftView extends StatelessWidget {
                   );
               Navigator.pop(dlgContext);
             },
-            child: const Text('Confirm & Close'),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+            ),
+            child: const Text('تأكيد وإغلاق الوردية'),
           ),
         ],
       ),
@@ -614,43 +781,47 @@ class _ShiftView extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Shift Report Summary - Shift #${s.id}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildInfoRow('Cashier Name', s.cashierName),
-            _buildInfoRow('Status', s.status.toUpperCase()),
-            _buildInfoRow('Opened At', DateFormat.yMd().add_jm().format(s.openedAt)),
-            if (s.closedAt != null)
-              _buildInfoRow('Closed At', DateFormat.yMd().add_jm().format(s.closedAt!)),
-            const Divider(),
-            _buildInfoRow('Starting Cash', '${s.startingCash.toStringAsFixed(2)} ج.م'),
-            _buildInfoRow('Total Sales', '${s.totalSales.toStringAsFixed(2)} ج.م'),
-            _buildInfoRow('Total Purchases', '-${s.totalPurchases.toStringAsFixed(2)} ج.م'),
-            _buildInfoRow('Total Cash In', '${s.totalCashIn.toStringAsFixed(2)} ج.م'),
-            _buildInfoRow('Total Cash Out', '-${s.totalCashOut.toStringAsFixed(2)} ج.م'),
-            if (s.expectedClosingCash != null) ...[
+        title: Text('ملخص تقرير الوردية - وردية رقم #${s.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Directionality(
+          textDirection: ui.TextDirection.rtl,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildInfoRow('اسم الكاشير', s.cashierName),
+              _buildInfoRow('حالة الوردية', s.status == 'open' ? 'مفتوحة' : 'مغلقة', color: s.status == 'open' ? Colors.green : Colors.grey),
+              _buildInfoRow('تاريخ ووقت الفتح', DateFormat('yyyy-MM-dd HH:mm').format(s.openedAt)),
+              if (s.closedAt != null)
+                _buildInfoRow('تاريخ ووقت الإغلاق', DateFormat('yyyy-MM-dd HH:mm').format(s.closedAt!)),
               const Divider(),
-              _buildInfoRow('Expected Closing Cash', '${s.expectedClosingCash!.toStringAsFixed(2)} ج.م'),
-              _buildInfoRow('Actual Closing Cash', '${s.actualClosingCash!.toStringAsFixed(2)} ج.م'),
-              _buildInfoRow(
-                'Variance (العجز/الزيادة)',
-                '${s.variance!.toStringAsFixed(2)} ج.م',
-                color: s.variance! < 0 ? Colors.red : (s.variance! > 0 ? Colors.blue : Colors.green),
-              ),
+              _buildInfoRow('عهدة البداية', '${s.startingCash.toStringAsFixed(2)} ج.م'),
+              _buildInfoRow('إجمالي المبيعات', '${s.totalSales.toStringAsFixed(2)} ج.م'),
+              _buildInfoRow('إجمالي المشتريات (المصروفات)', '-${s.totalPurchases.toStringAsFixed(2)} ج.م', color: Colors.red),
+              _buildInfoRow('المقبوضات النقدية (الإدخال)', '${s.totalCashIn.toStringAsFixed(2)} ج.م'),
+              _buildInfoRow('المدفوعات النقدية (الصرف)', '-${s.totalCashOut.toStringAsFixed(2)} ج.م'),
+              if (s.expectedClosingCash != null) ...[
+                const Divider(),
+                _buildInfoRow('النقد المتوقع عند الإغلاق', '${s.expectedClosingCash!.toStringAsFixed(2)} ج.م'),
+                _buildInfoRow('النقد الفعلي عند الإغلاق', '${s.actualClosingCash!.toStringAsFixed(2)} ج.م'),
+                _buildInfoRow(
+                  'الفارق (العجز/الزيادة)',
+                  '${s.variance!.toStringAsFixed(2)} ج.م',
+                  color: s.variance! < 0 ? Colors.red : (s.variance! > 0 ? Colors.blue : Colors.green),
+                ),
+              ],
+              if (s.notes != null) ...[
+                const Divider(),
+                Text('ملاحظات إضافية:', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(s.notes!, style: const TextStyle(fontStyle: FontStyle.italic)),
+              ]
             ],
-            if (s.notes != null) ...[
-              const Divider(),
-              Text('Notes:', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
-              Text(s.notes!, style: const TextStyle(fontStyle: FontStyle.italic)),
-            ]
-          ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
+            child: const Text('إغلاق'),
           ),
         ],
       ),

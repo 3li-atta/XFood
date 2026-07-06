@@ -5,10 +5,10 @@ import '../entities/profit_loss_report_entity.dart';
 /// Abstract repository contract for transaction operations.
 abstract class TransactionRepository {
   /// Get all transactions, newest first.
-  Future<List<TransactionEntity>> getAllTransactions();
+  Future<List<TransactionEntity>> getAllTransactions({int limit = 50, int offset = 0});
 
   /// Get transactions filtered by type.
-  Future<List<TransactionEntity>> getTransactionsByType(String type);
+  Future<List<TransactionEntity>> getTransactionsByType(String type, {int limit = 50, int offset = 0});
 
   /// Get transactions within a date range.
   Future<List<TransactionEntity>> getTransactionsByDateRange(
@@ -20,15 +20,18 @@ abstract class TransactionRepository {
   /// Watch all transactions (reactive stream for dashboard).
   Stream<List<TransactionEntity>> watchAllTransactions();
 
-  /// Create a sale with automatic stock deduction.
-  /// Returns the new transaction id.
+  /// Create a sale transaction, deduct meal recipes from inventory, and update treasury.
   Future<int> createSale({
     required int userId,
     required int? shiftId,
     required double totalAmount,
-    required String? notes,
+    required double discountPercentage,
+    required double taxPercentage,
     required List<SaleInput> items,
-    double discountPercentage = 0.0,
+    String? notes,
+    String orderType = 'takeaway',
+    String paymentMethod = 'cash',
+    int? tableId,
   });
 
   /// Record waste.
@@ -42,7 +45,7 @@ abstract class TransactionRepository {
   Future<ProfitLossReportEntity> getProfitLossReport(DateTime start, DateTime end);
 
   /// Refund a sale transaction.
-  Future<bool> refundSaleTransaction(int transactionId, int userId);
+  Future<bool> refundSaleTransaction(int transactionId, int userId, String reason);
 
   /// Check if a transaction is refunded.
   Future<bool> isTransactionRefunded(int transactionId);

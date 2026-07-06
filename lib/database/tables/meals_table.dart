@@ -4,6 +4,8 @@ import 'package:drift/drift.dart';
 ///
 /// - [isActive] enables soft-delete (hide from POS without losing history).
 /// - [category] groups meals for display (Appetizer, Main Course, etc.).
+@TableIndex(name: 'idx_meals_category', columns: {#category})
+@TableIndex(name: 'idx_meals_is_active', columns: {#isActive})
 class Meals extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().withLength(min: 1, max: 100)();

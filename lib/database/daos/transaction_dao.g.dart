@@ -6,6 +6,7 @@ part of 'transaction_dao.dart';
 mixin _$TransactionDaoMixin on DatabaseAccessor<AppDatabase> {
   $UsersTable get users => attachedDatabase.users;
   $ShiftsTable get shifts => attachedDatabase.shifts;
+  $TablesTable get tables => attachedDatabase.tables;
   $TransactionsTable get transactions => attachedDatabase.transactions;
   $MealsTable get meals => attachedDatabase.meals;
   $IngredientsTable get ingredients => attachedDatabase.ingredients;
@@ -24,6 +25,8 @@ class TransactionDaoManager {
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$ShiftsTableTableManager get shifts =>
       $$ShiftsTableTableManager(_db.attachedDatabase, _db.shifts);
+  $$TablesTableTableManager get tables =>
+      $$TablesTableTableManager(_db.attachedDatabase, _db.tables);
   $$TransactionsTableTableManager get transactions =>
       $$TransactionsTableTableManager(_db.attachedDatabase, _db.transactions);
   $$MealsTableTableManager get meals =>

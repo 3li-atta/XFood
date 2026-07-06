@@ -26,6 +26,12 @@ class SessionManager {
   /// Whether a user is currently logged in.
   bool get isLoggedIn => _currentUser != null;
 
+  /// Check if the current user has a specific permission.
+  bool hasPermission(String permission) {
+    if (isAdmin) return true; // Admin has all permissions by default
+    return _currentUser?.permissions.contains(permission) ?? false;
+  }
+
   /// Store the user after successful login.
   void setUser(UserEntity user) {
     _currentUser = user;

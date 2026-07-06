@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import '../bloc/treasury_bloc.dart';
-import '../../domain/entities/treasury_transaction_entity.dart';
 import '../../../shifts/presentation/bloc/shift_bloc.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/utils/session_manager.dart';
@@ -28,8 +27,34 @@ class TreasuryPage extends StatelessWidget {
   }
 }
 
-class _TreasuryView extends StatelessWidget {
+class _TreasuryView extends StatefulWidget {
   const _TreasuryView();
+
+  @override
+  State<_TreasuryView> createState() => _TreasuryViewState();
+}
+
+class _TreasuryViewState extends State<_TreasuryView> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_scrollListener);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_scrollListener);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      context.read<TreasuryBloc>().add(const LoadMoreTreasury());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,15 +63,17 @@ class _TreasuryView extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Treasury Dashboard (الخزينة)'),
+        title: const Text('إدارة الخزينة', style: TextStyle(fontWeight: FontWeight.bold)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+          tooltip: 'العودة للمبيعات',
           onPressed: () => context.go('/pos'),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => context.read<TreasuryBloc>().add(const LoadTreasury()),
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'تحديث البيانات',
+            onPressed: () => context.read<TreasuryBloc>().add(const LoadTreasury(isRefresh: true)),
           )
         ],
       ),
@@ -62,11 +89,11 @@ class _TreasuryView extends StatelessWidget {
           } else if (state is TreasurySuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('✓ Treasury adjustment saved successfully!'),
+                content: const Text('✓ تم حفظ حركة الخزينة بنجاح!'),
                 backgroundColor: colorScheme.primary,
               ),
             );
-            context.read<TreasuryBloc>().add(const LoadTreasury());
+            context.read<TreasuryBloc>().add(const LoadTreasury(isRefresh: true));
           }
         },
         builder: (context, state) {
@@ -90,9 +117,10 @@ class _TreasuryView extends StatelessWidget {
                       child: Column(
                         children: [
                           Text(
-                            'Current Treasury Balance',
+                            'رصيد الخزينة الحالي',
                             style: theme.textTheme.titleMedium?.copyWith(
                               color: colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -163,49 +191,80 @@ class _TreasuryView extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   child: Text(
-                    'Recent Transactions (العمليات الأخيرة)',
+                    'العمليات الأخيرة بالخزينة',
                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
                 // Transactions List
                 Expanded(
                   child: state.transactions.isEmpty
-                      ? const Center(child: Text('No transactions recorded yet.'))
+                      ? const Center(child: Text('لا توجد عمليات مسجلة في الخزينة حتى الآن.'))
                       : ListView.separated(
+                          controller: _scrollController,
                           padding: const EdgeInsets.all(16),
-                          itemCount: state.transactions.length,
+                          itemCount: state.transactions.length + (state.hasMore ? 1 : 0),
                           separatorBuilder: (_, __) => const Divider(),
                           itemBuilder: (context, index) {
+                            if (index >= state.transactions.length) {
+                              return const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+                            }
                             final tx = state.transactions[index];
-                            final isIncome = tx.type == 'sale_income' || tx.type == 'cash_in' || tx.type == 'shift_open';
+                            final isNeutral = tx.type == 'shift_close';
+                            final isIncome = !isNeutral && (tx.type == 'sale_income' || tx.type == 'cash_in' || tx.type == 'shift_open');
+
+                            Color iconBgColor;
+                            IconData iconData;
+                            Color iconColor;
+                            String amountPrefix;
+                            Color amountColor;
+
+                            if (isNeutral) {
+                              iconBgColor = Colors.blue.withValues(alpha: 0.1);
+                              iconData = Icons.lock_outline;
+                              iconColor = Colors.blue;
+                              amountPrefix = '';
+                              amountColor = Colors.blue.shade800;
+                            } else {
+                              iconBgColor = isIncome
+                                  ? Colors.green.withValues(alpha: 0.1)
+                                  : Colors.red.withValues(alpha: 0.1);
+                              iconData = isIncome ? Icons.trending_up : Icons.trending_down;
+                              iconColor = isIncome ? Colors.green : Colors.red;
+                              amountPrefix = isIncome ? "+" : "-";
+                              amountColor = isIncome ? Colors.green : Colors.red;
+                            }
+
                             return ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: isIncome
-                                    ? Colors.green.withValues(alpha: 0.1)
-                                    : Colors.red.withValues(alpha: 0.1),
+                                backgroundColor: iconBgColor,
                                 child: Icon(
-                                  isIncome ? Icons.trending_up : Icons.trending_down,
-                                  color: isIncome ? Colors.green : Colors.red,
+                                  iconData,
+                                  color: iconColor,
                                 ),
                               ),
-                              title: Text(tx.description ?? tx.type.toUpperCase()),
+                              title: Text(_getArabicDescription(tx.description, tx.type), style: const TextStyle(fontWeight: FontWeight.w600)),
                               subtitle: Text(
-                                '${DateFormat.yMd().add_jm().format(tx.createdAt)} • Shift: #${tx.shiftId ?? "N/A"}',
+                                '${DateFormat('yyyy-MM-dd HH:mm').format(tx.createdAt)} • الوردية: #${tx.shiftId ?? "غير محدد"}',
                               ),
                               trailing: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    '${isIncome ? "+" : "-"}${tx.amount.toStringAsFixed(2)} ج.م',
+                                    '$amountPrefix${tx.amount.toStringAsFixed(2)} ج.م',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
-                                      color: isIncome ? Colors.green : Colors.red,
+                                      color: amountColor,
                                     ),
                                   ),
                                   Text(
-                                    'Bal: ${tx.balanceAfter.toStringAsFixed(2)} ج.م',
+                                    'Bal: ${tx.balanceAfter.toStringAsFixed(2)} ج.m',
                                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                                   ),
                                 ],
@@ -231,43 +290,57 @@ class _TreasuryView extends StatelessWidget {
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: Text(type == 'cash_in' ? 'Deposit Cash (إيداع نقدي)' : 'Withdraw Cash (سحب نقدي)'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'المبلغ (ج.م)',
-                border: OutlineInputBorder(),
-              ),
+        title: Text(
+          type == 'cash_in' ? 'إيداع نقدي بالخزينة' : 'سحب نقدي من الخزينة',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Directionality(
+          textDirection: TextDirection.rtl,
+          child: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                TextField(
+                  controller: amountController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'المبلغ المراد إدخاله (ج.م) *',
+                    hintText: 'أدخل قيمة المبلغ...',
+                    prefixIcon: Icon(Icons.calculate_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(
+                    labelText: 'السبب / البيان *',
+                    hintText: 'توضيح سبب حركة الإيداع/السحب...',
+                    prefixIcon: Icon(Icons.note_alt_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descController,
-              decoration: const InputDecoration(
-                labelText: 'Reason/Description',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Cancel'),
+            child: const Text('إلغاء'),
           ),
           FilledButton(
             onPressed: () {
               final amount = double.tryParse(amountController.text) ?? 0.0;
-              final desc = descController.text;
+              final desc = descController.text.trim();
               if (amount > 0) {
-                 final shiftState = context.read<ShiftBloc>().state;
-                 int? shiftId;
-                 if (shiftState.activeShift != null) {
-                   shiftId = shiftState.activeShift!.id;
-                 }
+                final shiftState = context.read<ShiftBloc>().state;
+                int? shiftId;
+                if (shiftState.activeShift != null) {
+                  shiftId = shiftState.activeShift!.id;
+                }
 
                 context.read<TreasuryBloc>().add(
                       AddManualAdjustmentRequested(
@@ -281,10 +354,63 @@ class _TreasuryView extends StatelessWidget {
                 Navigator.pop(dialogCtx);
               }
             },
-            child: const Text('Submit'),
+            child: const Text('تأكيد الحركة'),
           ),
         ],
       ),
     );
+  }
+
+  String _getArabicDescription(String? description, String type) {
+    if (description == null || description.isEmpty) {
+      switch (type) {
+        case 'sale_income':
+          return 'إيراد مبيعات';
+        case 'cash_in':
+          return 'إيداع نقدي يدوي';
+        case 'cash_out':
+          return 'سحب نقدي يدوي';
+        case 'shift_open':
+          return 'رأس مال افتتاح الوردية';
+        case 'expense':
+          return 'تسجيل مصروف';
+        case 'purchase':
+          return 'مشتريات';
+        default:
+          return type.toUpperCase();
+      }
+    }
+    
+    final desc = description.trim();
+    if (desc.startsWith('Sale income from Transaction #')) {
+      final id = desc.replaceAll('Sale income from Transaction #', '');
+      return 'إيراد مبيعات فاتورة رقم #$id';
+    }
+    if (desc.startsWith('Shift starting cash - Shift #')) {
+      final id = desc.replaceAll('Shift starting cash - Shift #', '');
+      return 'عهدة افتتاح الوردية رقم #$id';
+    }
+    if (desc.startsWith('Expense: ')) {
+      final cat = desc.replaceAll('Expense: ', '');
+      return 'تسجيل مصروف: $cat';
+    }
+    if (desc.startsWith('Purchase: Bill #')) {
+      final id = desc.replaceAll('Purchase: Bill #', '');
+      return 'شراء سلع - فاتورة رقم #$id';
+    }
+    
+    if (desc.startsWith('Closing cash count for shift #')) {
+      final parts = desc.split('. Reconciled variance: ');
+      final shiftPart = parts[0].replaceAll('Closing cash count for shift #', '');
+      final variancePart = parts.length > 1 ? parts[1] : '0.0';
+      final double? varVal = double.tryParse(variancePart);
+      final varStr = varVal != null ? varVal.toStringAsFixed(2) : variancePart;
+      return 'جرد وإغلاق الوردية رقم #$shiftPart (الفارق: $varStr ج.م)';
+    }
+    
+    if (desc.toLowerCase() == 'manual cash in') return 'إيداع نقدي يدوي';
+    if (desc.toLowerCase() == 'manual cash out') return 'سحب نقدي يدوي';
+    
+    return desc;
   }
 }

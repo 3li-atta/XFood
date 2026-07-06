@@ -96,4 +96,24 @@ class MealDao extends DatabaseAccessor<AppDatabase> with _$MealDaoMixin {
   Future<int> deleteMeal(int mealId) {
     return (delete(meals)..where((m) => m.id.equals(mealId))).go();
   }
+
+  /// Get list of meal IDs that have low stock ingredients (less than 2 portions remaining).
+  Future<List<int>> getLowStockMealIds() async {
+    final rows = await customSelect(
+      'SELECT DISTINCT r.meal_id FROM recipes r '
+      'JOIN ingredients i ON r.ingredient_id = i.id '
+      'WHERE i.current_stock < (r.quantity_required * 2.0)'
+    ).get();
+    return rows.map((row) => row.read<int>('meal_id')).toList();
+  }
+
+  /// Watch list of meal IDs that have low stock ingredients.
+  Stream<List<int>> watchLowStockMealIds() {
+    return customSelect(
+      'SELECT DISTINCT r.meal_id FROM recipes r '
+      'JOIN ingredients i ON r.ingredient_id = i.id '
+      'WHERE i.current_stock < (r.quantity_required * 2.0)',
+      readsFrom: {db.meals, db.recipes, db.ingredients},
+    ).watch().map((rows) => rows.map((row) => row.read<int>('meal_id')).toList());
+  }
 }

@@ -269,22 +269,61 @@ class _PurchaseView extends StatelessWidget {
   }
 
   void _confirmVoidInvoice(BuildContext context, PurchaseInvoiceEntity inv) {
+    final reasonController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Void Invoice?'),
-        content: Text('Are you sure you want to void invoice ${inv.invoiceNumber}? This will reverse stock addition and refund treasury balance.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              context.read<PurchaseBloc>().add(VoidPurchaseInvoiceRequested(inv.id));
-              Navigator.pop(ctx);
-            },
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Void Invoice'),
-          ),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          return AlertDialog(
+            title: const Text('إلغاء الفاتورة؟ (Void Invoice?)'),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Are you sure you want to void invoice ${inv.invoiceNumber}? This will reverse stock addition and refund treasury balance.'),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: reasonController,
+                    decoration: const InputDecoration(
+                      labelText: 'سبب الإلغاء (Void Reason) *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) {
+                        return 'الرجاء إدخال سبب الإلغاء';
+                      }
+                      return null;
+                    },
+                    onChanged: (val) {
+                      setState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: reasonController.text.trim().isNotEmpty
+                    ? () {
+                        if (formKey.currentState!.validate()) {
+                          context.read<PurchaseBloc>().add(VoidPurchaseInvoiceRequested(
+                                invoiceId: inv.id,
+                                reason: reasonController.text.trim(),
+                              ));
+                          Navigator.pop(ctx);
+                        }
+                      }
+                    : null,
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('Void Invoice'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

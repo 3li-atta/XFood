@@ -37,7 +37,44 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .get();
   }
+  /// Get combined paginated transactions across sale, purchase and expense.
+  Future<List<Transaction>> getCombinedTransactionsPaginated(int limit, int offset) async {
+    final rows = await customSelect(
+      'SELECT id, user_id, type, total_amount, notes, created_at, order_type, payment_method FROM transactions '
+      'UNION ALL '
+      'SELECT id, user_id, \'purchase\' as type, total_amount, notes, created_at, \'takeaway\' as order_type, \'cash\' as payment_method FROM purchase_invoices '
+      'UNION ALL '
+      'SELECT id, 0 as user_id, \'expense\' as type, amount as total_amount, note as notes, date as created_at, \'takeaway\' as order_type, \'cash\' as payment_method FROM expenses '
+      'ORDER BY created_at DESC LIMIT ? OFFSET ?',
+      variables: [Variable<int>(limit), Variable<int>(offset)],
+    ).get();
 
+    return rows.map<Transaction>((row) {
+      return Transaction(
+        id: row.read<int>('id'),
+        userId: row.read<int>('user_id'),
+        type: row.read<String>('type'),
+        totalAmount: row.read<double>('total_amount'),
+        notes: row.read<String?>('notes'),
+        createdAt: row.read<DateTime>('created_at'),
+        orderType: row.read<String>('order_type'),
+        paymentMethod: row.read<String>('payment_method'),
+        shiftId: null,
+        subtotalAmount: 0.0,
+        discountAmount: 0.0,
+        taxAmount: 0.0,
+      );
+    }).toList();
+  }
+
+  /// Get transactions of a specific type paginated.
+  Future<List<Transaction>> getTransactionsByTypePaginated(String type, int limit, int offset) {
+    return (select(transactions)
+          ..where((t) => t.type.equals(type))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(limit, offset: offset))
+        .get();
+  }
   /// Get transactions for a specific date range.
   Future<List<Transaction>> getTransactionsByDateRange(
       DateTime start, DateTime end) {
@@ -84,6 +121,10 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
     required String? notes,
     required List<SaleLineItem> lineItems,
     double discountPercentage = 0.0,
+    double taxPercentage = 0.0,
+    String orderType = 'takeaway',
+    String paymentMethod = 'cash',
+    int? tableId,
   }) {
     return transaction(() async {
       // 1. Shift validation
@@ -95,14 +136,15 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
         throw Exception('The associated shift is not active or is closed.');
       }
 
-      // 2. Server-calculate totalAmount to prevent client price manipulation (V-03)
-      double calculatedTotal = 0.0;
+      // 2. Server-calculate amounts to prevent client manipulation (V-03)
+      double subtotal = 0.0;
       for (final item in lineItems) {
-        calculatedTotal += item.quantity * item.priceAtTime;
+        subtotal += item.quantity * item.priceAtTime;
       }
-      if (discountPercentage > 0) {
-        calculatedTotal = calculatedTotal * (1 - discountPercentage / 100);
-      }
+      double discountAmount = subtotal * (discountPercentage / 100);
+      double taxableAmount = subtotal - discountAmount;
+      double taxAmount = taxableAmount * (taxPercentage / 100);
+      double calculatedTotal = taxableAmount + taxAmount;
 
       // 3. Insert transaction header
       final txnId = await into(transactions).insert(
@@ -111,8 +153,14 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
           shiftId: Value(shiftId),
           type: 'sale',
           totalAmount: calculatedTotal,
-          notes: Value(discountPercentage > 0
-              ? '[Discount: ${discountPercentage.toStringAsFixed(0)}%]${notes != null ? " $notes" : ""}'
+          subtotalAmount: Value(subtotal),
+          discountAmount: Value(discountAmount),
+          taxAmount: Value(taxAmount),
+          orderType: Value(orderType),
+          paymentMethod: Value(paymentMethod),
+          tableId: Value(tableId),
+          notes: Value(discountPercentage > 0 || taxPercentage > 0
+              ? '[Discount: ${discountPercentage.toStringAsFixed(0)}%][Tax: ${taxPercentage.toStringAsFixed(0)}%]${notes != null ? " $notes" : ""}'
               : notes),
         ),
       );
@@ -188,15 +236,111 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
         ),
       );
 
-      // 6. Update Shift totalSales (co-transactional)
+      // 6. Update Shift totalSales (co-transactionally)
       await (update(shifts)..where((s) => s.id.equals(shiftId))).write(
         ShiftsCompanion(
           totalSales: Value(activeShift.totalSales + calculatedTotal),
         ),
       );
 
+      // 7. Update Table status to 'available' if associated with a table
+      if (tableId != null) {
+        await (update(db.tables)..where((t) => t.id.equals(tableId))).write(
+          const TablesCompanion(status: Value('available')),
+        );
+      }
+
+      // Audit Log logging
+      await db.into(db.auditLogs).insert(
+        AuditLogsCompanion.insert(
+          userId: userId,
+          action: 'create_sale',
+          details: Value('{"transactionId": $txnId, "totalAmount": $calculatedTotal, "discountPercentage": $discountPercentage, "orderType": "$orderType", "paymentMethod": "$paymentMethod", "tableId": $tableId}'),
+        ),
+      );
+
       return txnId;
     });
+  }
+
+  /// Get Z-Report data summary for a specific shift.
+  Future<Map<String, dynamic>> getZReportData(int shiftId) async {
+    final sales = await (select(transactions)
+          ..where((t) => t.shiftId.equals(shiftId) & t.type.equals('sale')))
+        .get();
+
+    double cashSales = 0.0;
+    double cardSales = 0.0;
+    double onlineSales = 0.0;
+    double totalDiscounts = 0.0;
+    double totalTax = 0.0;
+
+    for (final sale in sales) {
+      totalDiscounts += sale.discountAmount;
+      totalTax += sale.taxAmount;
+      if (sale.paymentMethod == 'card') {
+        cardSales += sale.totalAmount;
+      } else if (sale.paymentMethod == 'online') {
+        onlineSales += sale.totalAmount;
+      } else {
+        cashSales += sale.totalAmount;
+      }
+    }
+
+    final refunds = await (select(transactions)
+          ..where((t) => t.shiftId.equals(shiftId) & t.type.equals('refund')))
+        .get();
+    double refundAmount = refunds.fold(0.0, (sum, r) => sum + r.totalAmount);
+
+    return {
+      'cashSales': cashSales,
+      'cardSales': cardSales,
+      'onlineSales': onlineSales,
+      'totalDiscounts': totalDiscounts,
+      'totalTax': totalTax,
+      'refundsCount': refunds.length,
+      'refundAmount': refundAmount,
+    };
+  }
+
+  /// Get Sales Mix Report data for a specific date range.
+  Future<List<Map<String, dynamic>>> getSalesMixReport(DateTime start, DateTime end) async {
+    final rows = await customSelect(
+      'SELECT m.name, SUM(ti.quantity) as qty, ti.price_at_time as price, SUM(ti.quantity * ti.price_at_time) as total_revenue '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON ti.transaction_id = t.id '
+      'JOIN meals m ON ti.meal_id = m.id '
+      'WHERE t.type = \'sale\' AND t.created_at BETWEEN ? AND ? '
+      'GROUP BY ti.meal_id '
+      'ORDER BY qty DESC',
+      variables: [Variable<DateTime>(start), Variable<DateTime>(end)],
+    ).get();
+
+    return rows.map((row) => {
+      'name': row.read<String>('name'),
+      'qty': row.read<double>('qty'),
+      'price': row.read<double>('price'),
+      'total_revenue': row.read<double>('total_revenue'),
+    }).toList();
+  }
+
+  /// Get Recipe Cost Summary for all active meals.
+  Future<List<Map<String, dynamic>>> getRecipeCostSummary() async {
+    final rows = await customSelect(
+      'SELECT m.name, m.selling_price as selling_price, COALESCE(SUM(r.quantity_required * i.cost_price), 0.0) as total_cost '
+      'FROM meals m '
+      'LEFT JOIN recipes r ON m.id = r.meal_id '
+      'LEFT JOIN ingredients i ON r.ingredient_id = i.id '
+      'WHERE m.is_active = 1 '
+      'GROUP BY m.id '
+      'ORDER BY m.name ASC'
+    ).get();
+
+    return rows.map((row) => {
+      'name': row.read<String>('name'),
+      'selling_price': row.read<double>('selling_price'),
+      'total_cost': row.read<double>('total_cost'),
+    }).toList();
   }
 
   // ── Waste Recording ─────────────────────────────────────────
@@ -263,6 +407,15 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
       await (update(transactions)..where((t) => t.id.equals(txnId)))
           .write(TransactionsCompanion(totalAmount: Value(totalLoss)));
 
+      // Audit Log logging
+      await db.into(db.auditLogs).insert(
+        AuditLogsCompanion.insert(
+          userId: userId,
+          action: 'record_waste',
+          details: Value('{"transactionId": $txnId, "totalLoss": $totalLoss, "itemCount": ${lineItems.length}}'),
+        ),
+      );
+
       return txnId;
     });
   }
@@ -322,6 +475,7 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
   Future<bool> refundSaleTransaction({
     required int transactionId,
     required int userId,
+    required String reason,
   }) {
     return transaction(() async {
       // 1. Get currently active open shift
@@ -354,7 +508,7 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
           shiftId: Value(activeShift.id),
           type: 'refund',
           totalAmount: refundAmount,
-          notes: Value('Refund for Transaction #$transactionId'),
+          notes: Value('[Refund Reason: $reason] Refund for Transaction #$transactionId'),
         ),
       );
 
@@ -420,6 +574,15 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
       await (update(shifts)..where((s) => s.id.equals(activeShift.id))).write(
         ShiftsCompanion(
           totalSales: Value(activeShift.totalSales - refundAmount),
+        ),
+      );
+
+      // Audit Log logging
+      await db.into(db.auditLogs).insert(
+        AuditLogsCompanion.insert(
+          userId: userId,
+          action: 'refund_sale',
+          details: Value('{"originalTransactionId": $transactionId, "refundTransactionId": $refundTxnId, "refundAmount": $refundAmount, "reason": "$reason"}'),
         ),
       );
 

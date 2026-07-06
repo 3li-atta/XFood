@@ -3,6 +3,8 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  nsd_windows
+  printing
   restart_app
   sqlite3_flutter_libs
 )

@@ -9,6 +9,7 @@ import 'ingredients_table.dart';
 /// - For sales: [mealId] is set, [itemType] = 'meal'
 /// - For purchases/waste: [ingredientId] is set, [itemType] = 'ingredient'
 /// - [priceAtTime] snapshots the price at transaction time for accurate reports.
+@TableIndex(name: 'idx_transaction_items_transaction_id', columns: {#transactionId})
 class TransactionItems extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get transactionId => integer().references(Transactions, #id)();

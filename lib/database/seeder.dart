@@ -14,6 +14,22 @@ class DatabaseSeeder {
   Future<void> seed() async {
     await _seedDefaultUsers();
     await _seedDefaultMenuAndInventory();
+    await _seedDefaultTables();
+  }
+
+  /// Seed initial dine-in tables if none exist.
+  Future<void> _seedDefaultTables() async {
+    final existingTables = await _db.tableDao.getAllTables();
+    if (existingTables.isEmpty) {
+      for (int i = 1; i <= 8; i++) {
+        await _db.tableDao.insertTable(
+          TablesCompanion.insert(
+            name: 'Table $i (طاولة $i)',
+            seatsCount: const Value(4),
+          ),
+        );
+      }
+    }
   }
 
   /// Create default admin and cashier users if none exist.
@@ -21,7 +37,7 @@ class DatabaseSeeder {
     final existingUsers = await _db.userDao.getAllUsers();
 
     if (existingUsers.isEmpty) {
-      await _db.userDao.insertUser(UsersCompanion.insert(
+      final adminId = await _db.userDao.insertUser(UsersCompanion.insert(
         username: 'admin',
         passwordHash: PasswordHasher.hash('admin123'),
         recoveryEmail: 'admin@xfood.local',
@@ -29,14 +45,34 @@ class DatabaseSeeder {
         mustChangePassword: const Value(true),
       ));
 
+      await _db.userDao.assignPermissions(adminId, [
+        'make_sales',
+        'manage_shifts',
+        'manage_inventory',
+        'manage_meals',
+        'view_transactions',
+        'view_reports',
+        'manage_purchases',
+        'manage_treasury',
+        'manage_backup',
+        'void_refund_sale',
+        'apply_large_discount',
+        'manage_users'
+      ]);
+
       // Also create a default cashier for quick testing
-      await _db.userDao.insertUser(UsersCompanion.insert(
+      final cashierId = await _db.userDao.insertUser(UsersCompanion.insert(
         username: 'cashier',
         passwordHash: PasswordHasher.hash('cashier123'),
         recoveryEmail: 'cashier@xfood.local',
         role: 'cashier',
         mustChangePassword: const Value(true),
       ));
+
+      await _db.userDao.assignPermissions(cashierId, [
+        'make_sales',
+        'manage_shifts'
+      ]);
     }
   }
 

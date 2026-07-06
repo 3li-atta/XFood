@@ -3,6 +3,8 @@ import 'users_table.dart';
 import 'shifts_table.dart';
 
 /// TreasuryTransactions table — logs cash movements inside the system.
+@TableIndex(name: 'idx_treasury_transactions_shift_id', columns: {#shiftId})
+@TableIndex(name: 'idx_treasury_transactions_created_at', columns: {#createdAt})
 class TreasuryTransactions extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get shiftId => integer().nullable().references(Shifts, #id)();
